@@ -15,7 +15,7 @@ Laravel 12 + Filament 4 기반 CMS(콘텐츠 관리 시스템). 크론(스케줄
 | 백엔드 | Laravel 12, PHP 8.3+ |
 | 관리자 패널 | Filament 4 (`/admin`, 경로는 `ADMIN_PATH` 환경변수로 변경 가능) |
 | DB | MySQL 5.7+ 또는 MariaDB 10.2+ (설치 마법사가 접속 시 자동 감지해 `DB_CONNECTION`을 알맞게 설정 — 3번 항목 참고) |
-| 프론트엔드 | Blade 템플릿 + 순수 JS(빌드 도구 없이 `public/js`, `public/css` 직접 서빙) |
+| 프론트엔드 | Blade 템플릿 + 순수 JS(빌드 도구 없이 `js/`, `css/` 직접 서빙) |
 | 로컬 개발 환경 | Docker(Laravel Sail 기반, `docker-compose.yml`) — 로컬 PHP 버전이 8.3 미만이면 반드시 이 방식 사용 |
 
 ---
@@ -51,17 +51,27 @@ database/
 ├── seeders/                초기 데이터(관리자 계정, 이메일 템플릿, 금칙어, 메뉴 등)
 └── geoip/                 로그인 국가감지용 정적 IP 대역 데이터(8-3 항목 필독)
 
-public/
-├── index.php               라라벨 진입점 — 서버의 문서 루트(DocumentRoot)는 반드시 이 public/ 폴더를 가리켜야 함
-├── install.php              최초 설치 마법사(3번 항목 참고, 설치 완료 후에는 접근이 자동으로 막힘)
-└── uploads/                 회원/관리자가 업로드한 파일이 저장되는 실제 위치(4번 항목 필독)
+index.php                    라라벨 진입점 — 저장소 루트 자체가 서버의 문서 루트(DocumentRoot)
+install.php                  최초 설치 마법사(3번 항목 참고, 설치 완료 후에는 접근이 자동으로 막힘)
+uploads/                     회원/관리자가 업로드한 파일이 저장되는 실제 위치(4번 항목 필독)
+css/, js/, fonts/            프론트엔드 정적 자산(빌드 도구 없이 직접 서빙)
+.htaccess                    URL 재작성 규칙
 ```
+
+> ⚠️ 표준 Laravel 배포는 `public/` 하위에 이 파일들이 있고 DocumentRoot가 `public/`을
+> 가리켜야 하지만, 이 저장소는 **`public/` 폴더 없이 위 파일들이 저장소 루트에 바로
+> 있는 평탄화(flatten)된 구조**입니다 — 크론/SSH를 못 쓰는 공유호스팅은 보통 DocumentRoot
+> 자체를 바꿀 수 없어 웹 루트 상위에 저장소를 그대로 올려야 하기 때문입니다. 그래서
+> **DocumentRoot는 저장소 루트를 그대로 가리키면 됩니다**(별도 설정 불필요). 코드에서는
+> `bootstrap/app.php`가 `public/` 디렉터리가 실제로 없으면 `usePublicPath()`로 라라벨의
+> "퍼블릭 경로" 개념 자체를 저장소 루트로 바꿔치기해서, `public_path()`를 쓰는 모든 코드가
+> 별도 수정 없이 그대로 동작합니다.
 
 ---
 
 ## 3. 설치 방법
 
-1. 이 zip 압축을 해제해 서버(공유호스팅 등)의 웹 루트 상위에 업로드하고, **웹서버 DocumentRoot는 반드시 `public/` 폴더**를 가리키도록 설정합니다. `.env` 파일은 미리 만들 필요가 없습니다 — 설치 마법사가 전부 생성합니다.
+1. 이 저장소를 그대로 서버(공유호스팅 등)의 웹 루트에 업로드합니다 — 위에서 설명한 평탄화 구조라 **DocumentRoot를 저장소 루트로 두면 됩니다**(별도로 `public/` 폴더를 가리키게 설정할 필요 없음). `.env` 파일은 미리 만들 필요가 없습니다 — 설치 마법사가 전부 생성합니다.
 2. 브라우저로 `https://내도메인/install.php`에 접속하면 5단계 설치 마법사가 실행됩니다: 환경 체크 → DB 연결 설정 → 사이트 기본 설정 → 설치 실행(마이그레이션+시더 자동 실행) → 완료.
    > ⚠️ DB 연결 설정 단계에서 호스트/포트/DB명/계정 정보만 입력하면 됩니다. `.env` 파일과 `APP_KEY`는 이 단계에서 자동 생성되므로 직접 만들거나 수정할 필요가 없습니다. 서버가 MySQL인지 MariaDB인지, 몇 버전인지도 연결 테스트 시 자동으로 감지해 `DB_CONNECTION` 값에 알맞게 반영합니다(지원 최소 사양: MySQL 5.7 / MariaDB 10.2 이상 — JSON 컬럼을 쓰기 때문입니다. 미만이면 설치가 막히고 안내 메시지가 뜹니다).
 3. 설치가 완료되면 `install.php`는 자동으로 재접근이 차단됩니다(`RequireInstallation` 미들웨어가 `.env`의 설치 완료 플래그를 확인). 필요 없어지면 파일 자체를 지워도 됩니다.
@@ -71,9 +81,9 @@ public/
 
 ## 4. 업로드 파일은 `storage:link` 없이 동작합니다
 
-`config/filesystems.php`의 `uploads` 디스크가 `storage/app`이 아니라 **`public/uploads`를 직접 루트로 사용**하도록 되어 있습니다. 그래서:
+`config/filesystems.php`의 `uploads` 디스크가 `storage/app`이 아니라 **`public_path('uploads')`를 직접 루트로 사용**하도록 되어 있습니다(이 저장소에서는 `public_path()`가 저장소 루트를 가리키므로 실제로는 저장소 루트의 `uploads/` 폴더). 그래서:
 - `php artisan storage:link` 실행이 **필요 없습니다**(공유호스팅은 심볼릭 링크 생성이 막혀 있는 경우가 많아 이렇게 설계됨).
-- 배포 시 `public/uploads/` 폴더에 쓰기 권한(755 또는 775)만 있으면 됩니다.
+- 배포 시 저장소 루트의 `uploads/` 폴더에 쓰기 권한(755 또는 775)만 있으면 됩니다.
 
 ---
 
@@ -482,10 +492,10 @@ Route::post('/reservation', [ReservationController::class, 'store'])->name('rese
 ## 13. 재사용 가능한 슬라이드 컴포넌트 (`<x-slider>`)
 
 배너/게시판 등 어디서든 쓸 수 있는 반응형 캐러셀입니다. [Swiper](https://swiperjs.com) 14를
-`public/js/vendor/swiper`, `public/css/vendor/swiper`에 벤더링해 빌드 도구 없이 그대로
+`js/vendor/swiper`, `css/vendor/swiper`에 벤더링해 빌드 도구 없이 그대로
 서빙하고(빌드 파이프라인이 없는 이 프론트엔드 관례를 그대로 따름), 그 위에 이 프로젝트
-전용 래퍼/스타일(`resources/views/components/slider.blade.php`, `public/js/slider-init.js`,
-`public/css/slider.css`)을 얹은 구조입니다. Swiper 본체와 이 프로젝트의 스타일은 서로 다른
+전용 래퍼/스타일(`resources/views/components/slider.blade.php`, `js/slider-init.js`,
+`css/slider.css`)을 얹은 구조입니다. Swiper 본체와 이 프로젝트의 스타일은 서로 다른
 파일로 분리되어 있어 Swiper를 다른 버전으로 교체해도 우리 쪽 CSS/JS는 건드릴 필요가
 없습니다.
 
