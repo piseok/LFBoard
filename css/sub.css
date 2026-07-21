@@ -1,0 +1,136 @@
+/* 서브페이지 공통 스타일 — layouts.subpage를 쓰는 모든 화면(게시판/문의/마이페이지/정책/검색 등)에서 로드된다.
+   색상 변수(--color-*)는 frontend.css의 :root에서 정의된 것을 그대로 참조한다. */
+
+/* 서브페이지 상단 경로 표시(홈 > 상위메뉴 > 현재메뉴) */
+.breadcrumb { margin-bottom: 16px; }
+.breadcrumb ol { display: flex; flex-wrap: wrap; align-items: center; list-style: none; margin: 0; padding: 0; font-size: .85rem; color: var(--color-text-muted); }
+.breadcrumb li { display: flex; align-items: center; }
+.breadcrumb li:not(:last-child)::after { content: '>'; margin: 0 8px; color: var(--color-border); }
+.breadcrumb a { color: var(--color-text-muted); }
+.breadcrumb a:hover { color: var(--color-primary); text-decoration: underline; }
+.breadcrumb li:last-child span { color: var(--color-text); font-weight: 600; }
+
+/* 서브페이지 레이아웃 (로컬 서브메뉴 + 본문) */
+.content-layout { display: flex; gap: 32px; align-items: flex-start; }
+.content-main { flex: 1; min-width: 0; }
+.local-nav {
+    width: 220px;
+    flex-shrink: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.local-nav-title {
+    margin: 0;
+    padding: 16px;
+    font-size: 1rem;
+    background: var(--color-primary);
+    color: #fff;
+}
+.local-nav > ul { list-style: none; margin: 0; padding: 8px; }
+.local-nav-item { display: flex; align-items: center; justify-content: space-between; }
+.local-nav-item a {
+    flex: 1;
+    display: block;
+    padding: 10px 8px;
+    color: var(--color-text);
+    border-radius: 6px;
+    font-weight: 600;
+}
+.local-nav-item a:hover, .local-nav-item a:focus-visible { background: var(--color-bg-alt); text-decoration: none; }
+.local-nav > ul > li.is-active > .local-nav-item > a { color: var(--color-primary); }
+.submenu-toggle {
+    background: none;
+    border: none;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+.submenu-toggle svg { width: 16px; height: 16px; }
+.submenu-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.local-nav-sub { list-style: none; margin: 0 0 4px; padding: 0 0 0 14px; }
+.local-nav-sub.is-hidden { display: none; }
+.local-nav-sub li a {
+    display: block;
+    padding: 8px;
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    border-radius: 6px;
+}
+.local-nav-sub li a:hover, .local-nav-sub li a:focus-visible { background: var(--color-bg-alt); text-decoration: none; }
+.local-nav-sub li.is-active a { color: var(--color-primary); font-weight: 600; }
+
+@media (max-width: 768px) {
+    .content-layout { flex-direction: column; }
+    .local-nav { width: 100%; }
+}
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+.badge-notice { background: #fee2e2; color: var(--color-danger); }
+.badge-secret { background: #f3f4f6; color: var(--color-text-muted); }
+.badge-gray { background: #f3f4f6; color: var(--color-text-muted); }
+.badge-success { background: #dcfce7; color: #16a34a; }
+.badge-danger { background: #fee2e2; color: var(--color-danger); }
+.badge-warning { background: #fef3c7; color: #92400e; }
+
+/* 폼 */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
+.form-group .hint { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px; }
+input[type=text], input[type=email], input[type=password], input[type=tel], input[type=number], input[type=url], input[type=date], textarea, select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-family: inherit;
+}
+textarea { min-height: 160px; }
+.form-error { color: var(--color-danger); font-size: 0.82rem; margin-top: 4px; }
+.form-actions { margin-top: 20px; display: flex; gap: 8px; }
+
+.alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+.alert-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.alert-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+.post-meta { color: var(--color-text-muted); font-size: 0.85rem; display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* 콘텐츠 상세 공통 — 게시판/문의/정책/일반페이지가 함께 쓰는 "글 상세" 뼈대이므로
+   board.css가 아니라 여기(공용)에 둔다. */
+.post-header { border-bottom: 2px solid var(--color-text); padding-bottom: 16px; margin-bottom: 24px; }
+.post-title { font-size: 1.4rem; margin: 0 0 10px; }
+.post-content { line-height: 1.9; word-break: break-word; }
+.post-content img { border-radius: 6px; }
+.post-files { margin-top: 24px; padding: 16px; background: var(--color-bg-alt); border-radius: 8px; }
+.post-files ul { list-style: none; margin: 0; padding: 0; }
+
+/* 페이지네이션 — Paginator::defaultView()로 앱 전체에 등록되어 있어(vendor/pagination/custom.blade.php)
+   게시판뿐 아니라 커뮤니티/문의 등 목록이 있는 모든 화면에서 함께 쓴다. */
+.pagination { display: flex; gap: 8px; justify-content: center; align-items: center; margin-top: 24px; list-style: none; padding: 0; }
+.pagination a, .pagination span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    color: var(--color-text);
+    font-size: 0.95rem;
+    transition: .15s;
+}
+.pagination a:hover { border-color: var(--color-primary); color: var(--color-primary); text-decoration: none; }
+.pagination .disabled span { color: var(--color-border); border-color: var(--color-border); }
+.pagination .active span { background: var(--color-primary); color: #fff; border-color: var(--color-primary); font-weight: 700; }
+
+.btn-link { background: none; border: none; padding: 0; color: var(--color-text-muted); font-size: 0.82rem; cursor: pointer; text-decoration: underline; }
+.btn-link-danger { color: var(--color-danger); }
+
+/* 폼 보조 */
+.form-row { display: flex; gap: 12px; }
+.form-row > * { flex: 1; }
+.field-error { color: var(--color-danger); font-size: 0.8rem; margin: 4px 0 0; }

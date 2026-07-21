@@ -1,0 +1,140 @@
+/*
+ * <x-slider> 전용 스타일 — Swiper 본체(vendor/swiper/swiper-bundle.min.css) 위에 얹는
+ * 사이트 테마 스킨. frontend.css와는 완전히 별도 파일이며 서로 내용을 섞지 않는다.
+ * 색상/브레이크포인트 값은 frontend.css의 CSS 변수와 컨벤션을 그대로 참조만 한다.
+ */
+
+.lf-slider {
+    position: relative;
+}
+
+.lf-slider .swiper-slide img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+}
+
+.lf-slider .swiper-slide a {
+    display: block;
+}
+
+/* 이전/다음 버튼 — 기본은 CSS만으로 그리는 화살표. prevIcon/nextIcon 슬롯을 넘기면
+   data-custom-icon이 붙어 기본 화살표 대신 슬롯 내용이 보인다(사용처마다 커스텀 가능). */
+.lf-slider-nav {
+    position: absolute;
+    top: 50%;
+    z-index: 10;
+    width: 40px;
+    height: 40px;
+    margin-top: -20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-white, #fff);
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: .2s;
+    padding: 0;
+}
+
+.lf-slider-nav:hover,
+.lf-slider-nav:focus-visible {
+    background: var(--color-primary, #b45309);
+    border-color: var(--color-primary, #b45309);
+}
+
+.lf-slider-prev { left: 12px; }
+.lf-slider-next { right: 12px; }
+
+.lf-slider-nav:not([data-custom-icon])::before {
+    content: '';
+    width: 9px;
+    height: 9px;
+    border-top: 2px solid var(--color-text, #1f2937);
+    border-right: 2px solid var(--color-text, #1f2937);
+    transition: .2s;
+}
+
+.lf-slider-nav:hover:not([data-custom-icon])::before,
+.lf-slider-nav:focus-visible:not([data-custom-icon])::before {
+    border-color: var(--color-white, #fff);
+}
+
+.lf-slider-prev:not([data-custom-icon])::before { transform: rotate(-135deg); margin-left: 4px; }
+.lf-slider-next:not([data-custom-icon])::before { transform: rotate(45deg); margin-right: 4px; }
+
+.lf-slider .swiper-button-disabled { opacity: .35; cursor: default; }
+
+/* 페이지네이션 — dots(기본) */
+.lf-slider .swiper-pagination-bullet {
+    background: var(--color-border, #e5e7eb);
+    opacity: 1;
+}
+
+.lf-slider .swiper-pagination-bullet-active {
+    background: var(--color-primary, #b45309);
+}
+
+/* 페이지네이션 — numbers (렌더된 건 원형 dot이 아니라 클릭 가능한 숫자 버튼) */
+.lf-slider[data-pagination="numbers"] .swiper-pagination-bullet {
+    width: auto;
+    height: 24px;
+    min-width: 24px;
+    padding: 0 6px;
+    margin: 0 3px !important;
+    border-radius: 12px;
+    background: var(--color-bg-alt, #f9fafb);
+    font-size: .8rem;
+    line-height: 24px;
+    color: var(--color-text-muted, #6b7280);
+    border: 0;
+}
+
+.lf-slider[data-pagination="numbers"] .swiper-pagination-bullet-active {
+    background: var(--color-primary, #b45309);
+    color: var(--color-white, #fff);
+}
+
+/* 페이지네이션 — fraction ("01 / 03" 형태, Swiper 기본 마크업을 그대로 사용) */
+.lf-slider .swiper-pagination-fraction {
+    color: var(--color-text, #1f2937);
+    font-size: .85rem;
+    font-weight: 600;
+    letter-spacing: .05em;
+}
+
+/* 자동재생 일시정지/재생 토글 */
+.lf-slider-toggle {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 10;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .45);
+    color: var(--color-white, #fff);
+    border: 0;
+    border-radius: 50%;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.lf-slider-toggle::before { content: '⏸'; }
+.lf-slider-toggle[data-state="paused"]::before { content: '▶'; }
+
+@media (max-width: 992px) {
+    .lf-slider[data-pagination] .lf-slider-nav { width: 36px; height: 36px; margin-top: -18px; }
+}
+
+@media (max-width: 576px) {
+    .lf-slider-nav { width: 32px; height: 32px; margin-top: -16px; }
+    .lf-slider-prev { left: 6px; }
+    .lf-slider-next { right: 6px; }
+}

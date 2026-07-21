@@ -1,0 +1,16 @@
+.env
+.env.backup
+.env.production
+/storage/installed.lock
+/storage/*.key
+/storage/logs/*.log
+/storage/framework/cache/data/*
+/storage/framework/cache/purifier/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+!storage/**/.gitignore
+!storage/**/.gitkeep
+/public/uploads/**/*
+!/public/uploads/**/.gitkeep
+!/public/uploads/.htaccess
+/*-deploy.zip

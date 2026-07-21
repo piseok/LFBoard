@@ -1,0 +1,125 @@
+/* 게시판 전용 스타일 — board.* 라우트(목록/갤러리/FAQ/상세)에서만 로드된다.
+   색상 변수(--color-*)는 frontend.css의 :root에서 정의된 것을 그대로 참조한다.
+
+   여기 있는 클래스는 전부 board- 접두사로 네임스페이스를 분리해뒀다 — 다른 화면에서
+   같은 이름(예: .comment, .pagination, .gallery-grid)을 별 생각 없이 재사용해도 이
+   파일의 스타일이 의도치 않게 섞여 들어가지 않게 하기 위해서다. 반대로 여러 화면(게시판/
+   문의/정책 등)이 실제로 함께 쓰기로 하고 공유하는 요소(.post-meta, .post-header,
+   .post-content, .pagination 등)는 일부러 여기 두지 않고 sub.css에 정의한다. */
+
+/* 첨부파일/댓글 유무 아이콘 (게시글 목록·갤러리 카드) */
+.board-list-icon { width: 13px; height: 13px; margin-left: 4px; vertical-align: -2px; display: inline-block; color: var(--color-text-muted); }
+.board-gallery-icons { margin: 4px 0 0; display: flex; gap: 8px; align-items: center; }
+.board-gallery-icons:empty { display: none; }
+.board-list-comment-count { display: inline-flex; align-items: center; gap: 2px; font-size: 0.8rem; color: var(--color-text-muted); }
+.board-list-comment-count .board-list-icon { margin-left: 0; }
+
+/* 게시판 목록 */
+.board-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.board-toolbar-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.board-count-info { margin: 0; color: var(--color-text-muted); font-size: 0.85rem; white-space: nowrap; }
+table.board-list { width: 100%; border-collapse: collapse; }
+table.board-list th, table.board-list td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    font-size: 0.92rem;
+}
+table.board-list th { color: var(--color-text-muted); font-weight: 600; background: var(--color-bg-alt); }
+/* col-* 폭 유틸리티는 table.board-list 안에서만 의미가 있어 접두사 없이도 안전하게
+   격리된다(항상 이 조상 선택자를 통해서만 적용됨). */
+table.board-list td.col-num, table.board-list td.col-views, table.board-list td.col-date { color: var(--color-text-muted); white-space: nowrap; }
+table.board-list .col-recruitment { white-space: nowrap; text-align: center; }
+.board-recruitment-period { display: inline-block; margin-top: 4px; font-size: 0.8rem; color: var(--color-text-muted); }
+
+/* FAQ 게시판 스킨 — 상세페이지 이동 없이 목록에서 바로 펼쳐지는 아코디언(<details> 네이티브 사용) */
+.board-faq-list { display: flex; flex-direction: column; gap: 8px; }
+.board-faq-item { border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+.board-faq-question {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    list-style: none;
+}
+.board-faq-question::-webkit-details-marker { display: none; }
+.board-faq-question::after {
+    content: '+';
+    margin-left: auto;
+    font-size: 1.2rem;
+    font-weight: 300;
+    color: var(--color-text-muted);
+    transition: transform .2s;
+}
+.board-faq-item[open] .board-faq-question::after { transform: rotate(45deg); }
+.board-faq-q-badge, .board-faq-a-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.board-faq-q-badge { background: var(--color-primary); color: #fff; }
+.board-faq-a-badge { background: var(--color-bg-alt); color: var(--color-primary); }
+.board-faq-answer {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 4px 16px 18px 16px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 14px;
+}
+.board-faq-answer .post-content { flex: 1; min-width: 0; }
+.board-faq-detail-link { display: inline-block; margin-top: 10px; font-size: 0.85rem; }
+
+.board-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.board-gallery-item { border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+.board-gallery-item img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+.board-gallery-item .board-gallery-body { padding: 10px; }
+
+/* 게시판별 커스텀필드(예: 기업명/업종/주요제품) — 게시글 상세에서 라벨:값 목록으로 노출한다 */
+.board-custom-fields { margin: 0 0 24px; padding: 16px; background: var(--color-bg-alt); border-radius: 8px; }
+.board-custom-field-row { display: flex; gap: 12px; padding: 6px 0; }
+.board-custom-field-row:not(:last-child) { border-bottom: 1px solid var(--color-border); }
+.board-custom-field-row dt { flex-shrink: 0; width: 120px; font-weight: 600; color: var(--color-text-muted); }
+.board-custom-field-row dd { margin: 0; }
+
+.board-post-images { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 12px; }
+.board-post-images img { max-width: 100%; max-height: 480px; border-radius: 8px; display: block; }
+
+/* 이전글/다음글 — 다음글(더 최신)이 위, 이전글(더 과거)이 아래 순서로 보여준다 */
+.board-post-nav { margin-top: 24px; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.board-post-nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 4px; color: var(--color-text); }
+.board-post-nav-item:first-child { border-bottom: 1px solid var(--color-border); }
+.board-post-nav-item:hover { text-decoration: none; }
+.board-post-nav-item:hover .board-post-nav-title { text-decoration: underline; }
+.board-post-nav-label { flex-shrink: 0; width: 60px; color: var(--color-text-muted); font-size: 0.85rem; font-weight: 600; }
+.board-post-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.board-comments { margin-top: 32px; }
+.board-comment-list { list-style: none; margin: 0; padding: 0; }
+.board-comment { padding: 14px 0; border-bottom: 1px solid var(--color-border); }
+.board-comment.is-reply { margin-left: 32px; border-left: 2px solid var(--color-border); padding-left: 16px; }
+.board-comment-meta { font-size: 0.82rem; color: var(--color-text-muted); display: flex; gap: 10px; }
+.board-comment-content { margin-top: 6px; white-space: pre-wrap; }
+.board-comment-empty { padding: 24px 0; text-align: center; color: var(--color-text-muted); }
+.board-comment-actions { margin-top: 8px; display: flex; gap: 12px; align-items: center; }
+.board-comment-delete-form { display: flex; gap: 6px; align-items: center; margin: 0; }
+.board-comment-delete-password { width: 120px; padding: 4px 8px; font-size: 0.8rem; }
+.board-reply-form { margin-top: 12px; margin-left: 32px; }
+.board-comment-form { margin-top: 16px; }
+
+.board-category-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.board-category-filter a { padding: 6px 12px; border: 1px solid var(--color-border); border-radius: 999px; font-size: 0.85rem; color: var(--color-text); }
+.board-category-filter a.is-active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.board-search-form { display: flex; gap: 6px; }
+.board-search-form select { width: auto; }
+.board-search-form input[type=text] { width: 200px; }
+.board-file-list { list-style: none; margin: 0; padding: 0; }
+.board-file-list li { padding: 6px 0; }

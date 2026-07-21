@@ -1,0 +1,20 @@
+/* 관리자 패널 커스텀 스타일(Filament 코어 CSS 위에 얹는 소규모 보정) — 빌드 도구 불필요 */
+
+/* 토글(Toggle) 필드가 같은 그리드 행의 더 높은 필드(Select 등)와 나란히 있을 때 위쪽에
+   붙어 보이는 문제 보정 — .fi-grid-col은 이미 행 높이만큼 늘어나 있고, 그 안의
+   .fi-sc-component(block, height:100%로 다시 늘어남)가 실제 콘텐츠를 담고 있어서
+   이 단계에서 flex 중앙 정렬을 걸어야 토글이 실제로 가운데로 온다. */
+.fi-grid-col:has(.fi-fo-toggle) > .fi-sc-component {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* 탭이 많은 화면(사이트 설정 등)에서 탭 목록이 옆으로 넘칠 때, 탭 목록을 감싸는 .fi-sc-tabs가
+   flex 자식의 기본값(min-width:auto) 때문에 자기 콘텐츠(탭 전부 펼친 너비)만큼 줄어들지 않고
+   그대로 버텨서, 그 안의 .fi-tabs(overflow-x:auto로 원래는 탭만 스크롤되어야 함)가 스크롤될
+   기회도 없이 페이지 전체가 가로로 넘쳐버린다. min-width:0으로 실제 컨테이너 너비만큼
+   줄어들게 하면 탭 목록만 자체적으로 가로 스크롤되고 페이지 자체는 넘치지 않는다. */
+.fi-sc-tabs {
+    min-width: 0;
+}

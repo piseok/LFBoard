@@ -1,0 +1,39 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # 공유호스팅에서 도큐먼트 루트를 public/ 하위로 지정할 수 없어 저장소 전체를 그대로 웹
+    # 루트에 올리는 배포 구조(main 브랜치)에 대응 — 이 파일이 저장소 루트에 있을 때는 앱 내부
+    # 폴더/설정 파일이 그대로 웹에서 직접 접근 가능한 경로가 되므로, Laravel로 넘기기 전에
+    # 먼저 차단한다. public/ 하위에 있는 로컬 개발 환경에서는 애초에 이 경로들이 없어 무해하다.
+    RewriteCond %{REQUEST_URI} ^/(app|bootstrap|config|database|lang|resources|routes|storage|tests|scripts|vendor|\.git)(/|$) [NC,OR]
+    RewriteCond %{REQUEST_URI} \.(md|lock|log|sh)$ [NC,OR]
+    RewriteCond %{REQUEST_URI} ^/(\.env(\..*)?|composer\.json|artisan|package(-lock)?\.json|phpunit\.xml|\.gitignore|\.gitattributes)$ [NC]
+    RewriteRule ^ - [F,L]
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Handle X-XSRF-Token Header
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# mod_rewrite가 비활성화된 예외적인 환경을 대비한 이중 방어(.env는 절대 노출되면 안 됨).
+<FilesMatch "^\.env">
+    Require all denied
+</FilesMatch>
