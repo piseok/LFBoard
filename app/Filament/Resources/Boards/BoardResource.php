@@ -147,6 +147,7 @@ class BoardResource extends Resource
                         ->schema([
                             Repeater::make('custom_field_schema')
                                 ->label('필드 목록')
+                                ->default([])
                                 ->schema([
                                     TextInput::make('key')->label('필드 키')->required()
                                         ->regex('/^[a-z0-9_]+$/')
