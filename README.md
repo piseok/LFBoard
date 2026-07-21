@@ -98,6 +98,9 @@ css/, js/, fonts/            프론트엔드 정적 자산(빌드 도구 없이 
 | `RecordAdminAccess` | 관리자 접속 시각/IP/경로를 감사로그(`admin_audit_logs`, `action='access'`)에 기록 |
 | `PruneAdminAuditLogs` | 사이트 설정에 지정한 보관 기간이 지난 감사로그(접속 기록 포함)를 하루 1번 정리 |
 | `ProcessDormantAccounts` | 휴면 전환 대상/강제탈퇴 대상/예고 메일 발송 대상을 하루 1번 확인·처리 |
+| `ApplyScheduledPolicyChanges` | 예약된 약관/정책 변경 중 시행일이 지난 건을 하루 1번 확인해 실제 내용에 반영 |
+| `PruneAiChatHistory` | 사이트 설정에 지정한 보관 기간이 지난 AI 비서 대화(및 생성 이미지)를 하루 1번 완전 삭제 |
+| `PruneInquiries` | 사이트 설정에 지정한 보유기간이 지난 1:1 문의(첨부파일 포함)를 하루 1번 완전 삭제(파기) |
 | `SyncVendorNotices` | 사이트 설정에 관리업체 공지사항 API가 켜져 있으면 1시간에 1번 폴링해 `vendor_notices`에 반영(캐시 플래그 단위만 시간(hour)으로, 나머지는 동일한 패턴) |
 
 새로운 "주기적 처리"가 필요한 기능을 추가할 때는 **절대 크론을 전제로 설계하지 말고**, 위
@@ -176,7 +179,7 @@ CSV 최신본은 `https://github.com/sapics/ip-location-db`(dbip-country 폴더)
 | `AdminIpWhitelist` | 관리자 패널 접속을 허용 IP로 제한(슈퍼관리자는 예외) |
 | `AdminDebugMode` | 사이트 설정에서 켠 경우에만 관리자에게 상세 에러 페이지 노출 |
 | `SecurityHeaders` | 보안 헤더 일괄 적용 |
-| `RecordAdminAccess`, `PruneAdminAuditLogs`, `ProcessDormantAccounts`, `SyncVendorNotices` | 크론 대체 배치 처리(5번 항목 참고) |
+| `RecordAdminAccess`, `PruneAdminAuditLogs`, `ProcessDormantAccounts`, `ApplyScheduledPolicyChanges`, `PruneAiChatHistory`, `PruneInquiries`, `SyncVendorNotices` | 크론 대체 배치 처리(5번 항목 참고) |
 | `CheckUserLevel` (`auth.level`) | 게시판 등에서 회원 레벨 기준 접근 제어 |
 | `RecordVisit` (`record.visit`) | 방문자 통계 기록 |
 
