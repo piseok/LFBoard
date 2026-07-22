@@ -5,6 +5,7 @@ namespace App\Filament\Resources\VendorNotices;
 use App\Filament\Concerns\RequiresClientOrSuperAdmin;
 use App\Filament\Resources\VendorNotices\Pages\ListVendorNotices;
 use App\Models\VendorNotice;
+use App\Services\SiteSettingService;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -35,6 +36,18 @@ class VendorNoticeResource extends Resource
     protected static ?int $navigationSort = 91;
 
     protected static ?string $modelLabel = '관리업체 공지';
+
+    // 사이트 설정 > 관리업체 공지사항에서 API 수신을 켜고 URL을 등록해두기 전까지는
+    // SyncVendorNotices/VendorNoticeSyncService가 아무것도 채워주지 않아 항상 빈 목록이므로,
+    // AiChatLogResource와 같은 방식으로 그 전까지는 메뉴 자체를 감춘다(직접 URL 접근은 계속 허용).
+    public static function shouldRegisterNavigation(): bool
+    {
+        $settings = app(SiteSettingService::class);
+
+        return static::isSuperOrClientAdmin()
+            && $settings->get('vendor_notice_enabled') === '1'
+            && filled($settings->get('vendor_notice_api_url'));
+    }
 
     public static function form(Schema $schema): Schema
     {

@@ -89,6 +89,16 @@ class EmailTemplateSeeder extends Seeder
                 HTML,
             ],
             [
+                'type' => 'find_id',
+                'name' => '아이디 찾기',
+                'subject' => '[{{site_name}}] 아이디 찾기 안내',
+                'body' => <<<'HTML'
+                <p>안녕하세요, {{user_name}}님.</p>
+                <p>요청하신 로그인 아이디는 다음과 같습니다.</p>
+                <p><strong>{{user_id}}</strong></p>
+                HTML,
+            ],
+            [
                 'type' => 'dormant_notice',
                 'name' => '휴면 전환 예고',
                 'subject' => '[{{site_name}}] 회원님의 계정이 곧 휴면 상태로 전환됩니다',
@@ -202,6 +212,16 @@ class EmailTemplateSeeder extends Seeder
                 <p>Please click the link below to reset your password.</p>
                 <p><a href="{{reset_url}}">Reset Password</a></p>
                 <p>This link is valid for 60 minutes from the time it was sent.</p>
+                HTML,
+            ],
+            [
+                'type' => 'find_id', 'locale' => 'en',
+                'name' => 'Find ID',
+                'subject' => '[{{site_name}}] Your login ID',
+                'body' => <<<'HTML'
+                <p>Hello, {{user_name}}.</p>
+                <p>Your login ID is:</p>
+                <p><strong>{{user_id}}</strong></p>
                 HTML,
             ],
             [

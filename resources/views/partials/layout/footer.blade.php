@@ -55,6 +55,7 @@
                     @if ($footerEmailNoticePolicy)
                         <a href="{{ front_route('policy.email-notice') }}">{{ $footerEmailNoticePolicy->title }}</a>
                     @endif
+                    <a href="{{ front_route('sitemap') }}">{{ __('사이트맵') }}</a>
                 </nav>
 
                 @if ($address = $siteSettings->get('footer_address'))

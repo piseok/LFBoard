@@ -6,6 +6,7 @@ use App\Filament\Concerns\RequiresClientOrSuperAdmin;
 use App\Filament\Resources\AiChatLogs\Pages\ListAiChatLogs;
 use App\Models\AiChatConversation;
 use App\Models\User;
+use App\Services\AiChatService;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -43,6 +44,15 @@ class AiChatLogResource extends Resource
     protected static ?int $navigationSort = 65;
 
     protected static ?string $modelLabel = 'AI 대화';
+
+    // AI 제공자(OpenAI/Gemini) API 키가 하나도 설정되어 있지 않으면 AiChatWidget과 마찬가지로
+    // 메뉴 자체를 감춘다 — 키를 뺀 뒤에도 예전 대화 기록이 남아 있을 수 있어 조회 화면 자체를
+    // 없애지는 않고(직접 URL로는 여전히 접근 가능), 평소엔 안 쓰는 기능이 메뉴에 계속 떠 있지
+    // 않게만 한다.
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::isSuperOrClientAdmin() && ! empty(app(AiChatService::class)->availableProviders());
+    }
 
     // AiChatConversation에는 소유자별 글로벌 스코프가 없다(소유자 제한은 AiChatWidget 쪽
     // 쿼리에서만 적용됨) — 이 리소스는 RequiresClientOrSuperAdmin으로만 접근이 제한되므로

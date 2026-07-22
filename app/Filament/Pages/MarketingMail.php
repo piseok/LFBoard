@@ -8,6 +8,7 @@ use App\Models\EmailTemplate;
 use App\Models\MarketingMailLog;
 use App\Models\User;
 use App\Services\EmailService;
+use App\Services\SiteSettingService;
 use BackedEnum;
 use UnitEnum;
 use Filament\Forms\Components\TextInput;
@@ -35,6 +36,15 @@ class MarketingMail extends Page
     protected static ?string $title = '마케팅 메일 발송';
 
     public ?array $data = [];
+
+    // 사이트 설정 > 이메일(SMTP)에 발신 서버를 등록해두기 전까지는 발송 자체가 실패할 뿐이므로,
+    // AiChatLogResource와 같은 방식으로 그 전까지는 메뉴 자체를 감춘다(직접 URL 접근은 계속 허용).
+    // .env의 MAIL_HOST(mailpit 등 로컬 개발용 기본값)는 신뢰하지 않고, 관리자가 사이트 설정에서
+    // 직접 입력한 값만 "연동됨"으로 취급한다.
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canAccess() && filled(app(SiteSettingService::class)->get('mail_host'));
+    }
 
     public function mount(): void
     {

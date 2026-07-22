@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\DormantAccountController;
+use App\Http\Controllers\Auth\FindIdController;
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\BannerController;
 use App\Http\Controllers\BoardFrontController;
@@ -36,11 +37,17 @@ try {
 // 실제 발송 여부는 User::sendEmailVerificationNotification()에서 site_settings로 제어한다.
 // 다국어 지원: 로그인/회원가입 등도 언어 접두사가 없으면 소셜 로그인처럼 "로그인 후 항상 기본
 // 언어로 돌아가는" 문제가 생기므로, 프론트 라우트와 동일하게 기본 언어+활성 언어별로 중복 등록한다.
-Route::middleware('locale')->group(fn () => Auth::routes(['verify' => true]));
+$authExtraRoutes = function () {
+    Auth::routes(['verify' => true]);
+    Route::get('/find-id', [FindIdController::class, 'create'])->name('find-id');
+    Route::post('/find-id', [FindIdController::class, 'store'])->middleware('throttle:5,1')->name('find-id.submit');
+};
+
+Route::middleware('locale')->group($authExtraRoutes);
 
 foreach ($additionalLocales as $localeCode) {
     Route::prefix($localeCode)->name("{$localeCode}.")->middleware('locale')
-        ->group(fn () => Auth::routes(['verify' => true]));
+        ->group($authExtraRoutes);
 }
 
 // 소셜 로그인 — 지원 공급사가 아니거나 키가 설정되지 않은 경우 컨트롤러 내부에서 404 처리.
@@ -70,6 +77,7 @@ Route::middleware(['auth', 'throttle:10,1'])->group(function () {
 $frontRoutes = function () {
     Route::get('/', [FrontController::class, 'index'])->name('home');
     Route::get('/page/{slug}', [FrontController::class, 'page'])->name('page.show');
+    Route::get('/sitemap', [FrontController::class, 'sitemap'])->name('sitemap');
 
     Route::get('/board/{slug}', [BoardFrontController::class, 'index'])->name('board.index');
     // 쓰기 권한은 게시판별 min_write_level/allow_anonymous 설정에 따라 컨트롤러 내부에서 동적으로 판단한다

@@ -40,6 +40,9 @@
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">{{ __('로그인') }}</button>
+                @if (Route::has(\App\Models\Language::routeNamePrefix().'find-id'))
+                    <a href="{{ front_route('find-id') }}" class="btn">{{ __('아이디 찾기') }}</a>
+                @endif
                 @if (Route::has(\App\Models\Language::routeNamePrefix().'password.request'))
                     <a href="{{ front_route('password.request') }}" class="btn">{{ __('비밀번호 찾기') }}</a>
                 @endif

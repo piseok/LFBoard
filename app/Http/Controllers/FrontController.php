@@ -6,6 +6,7 @@ use App\Models\Banner;
 use App\Models\Page;
 use App\Models\User;
 use App\Services\HtmlSanitizerService;
+use App\Services\MenuService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
@@ -61,5 +62,16 @@ class FrontController extends Controller
             'pageKeywords' => $page->meta_keywords,
             'pageOgImage' => $page->og_image,
         ]);
+    }
+
+    // 검색엔진용 sitemap.xml(SeoController)과 별개로, 사람이 브라우저에서 전체 사이트 구조를
+    // 볼 수 있는 화면. hidden_from_header 메뉴(예: 마이페이지 그룹 — GNB에서만 숨김)도 실제로는
+    // 접근 가능한 페이지이므로 partials.layout.menu-items와 달리 여기서는 숨기지 않고 그대로 보여준다.
+    public function sitemap(): View
+    {
+        $userLevel = auth()->user()?->level ?? User::LEVEL_GUEST;
+        $tree = app(MenuService::class)->getTree($userLevel);
+
+        return view('sitemap.index', ['tree' => $tree, 'pageTitle' => __('사이트맵')]);
     }
 }

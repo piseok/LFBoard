@@ -48,6 +48,15 @@ class MaintenanceReportResource extends Resource
 
     protected static ?string $modelLabel = '유지보수 리포트';
 
+    // 사이트 설정 > 유지보수 리포트에 전송 대상 URL을 등록해두기 전까지는 리포트를 작성해도
+    // 전송할 곳이 없으므로, AiChatLogResource/VendorNoticeResource와 같은 방식으로 그 전까지는
+    // 메뉴 자체를 감춘다(직접 URL 접근은 계속 허용).
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::isSuperOrClientAdmin()
+            && filled(app(SiteSettingService::class)->get('maintenance_report_url'));
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([

@@ -35,7 +35,7 @@ class ServerStorageWidget extends BaseWidget
 
         return [
             Stat::make('업로드 파일 용량', $this->formatBytes($uploadsBytes))
-                ->description('public/uploads 폴더 전체 크기')
+                ->description($this->uploadsFolderLabel().' 폴더 전체 크기')
                 ->color('primary'),
 
             Stat::make('데이터베이스 용량', $dbBytes !== null ? $this->formatBytes($dbBytes) : '조회 불가')
@@ -92,6 +92,14 @@ class ServerStorageWidget extends BaseWidget
         } catch (Throwable) {
             return null;
         }
+    }
+
+    // bootstrap/app.php와 동일한 판단 — public/ 폴더가 실제로 있는 로컬 개발 환경에서는
+    // "public/uploads", public/이 저장소 루트로 평탄화된 배포 환경(main/각 client-deploy
+    // 브랜치)에서는 그냥 "uploads"라고 정확히 표시한다.
+    private function uploadsFolderLabel(): string
+    {
+        return is_dir(base_path('public')) ? 'public/uploads' : 'uploads';
     }
 
     private function diskFreeSpace(): ?int

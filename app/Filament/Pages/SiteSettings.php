@@ -416,6 +416,7 @@ class SiteSettings extends Page
                         $this->boolToggle('email_inquiry_received_user_enabled', '상담 접수 확인 (문의자)'),
                         $this->boolToggle('email_inquiry_reply_enabled', '상담 답변 완료 (문의자)'),
                         $this->boolToggle('email_password_reset_enabled', '비밀번호 재설정'),
+                        $this->boolToggle('email_find_id_enabled', '아이디 찾기'),
                         $this->boolToggle('email_marketing_broadcast_enabled', '마케팅 메일(대량 발송)')
                             ->helperText('마케팅 수신에 동의한 회원 대상 대량 발송(사이트 설정 > 마케팅 메일 화면) 사용 여부입니다.'),
                         $this->boolToggle('email_policy_change_notice_enabled', '약관/방침 변경 안내')
@@ -563,6 +564,8 @@ class SiteSettings extends Page
                 $this->boolToggle('show_footer_inquiry', '하단 상담폼 표시'),
                 $this->boolToggle('show_quick_menu', '퀵메뉴 상담 아이콘 표시')
                     ->helperText('꺼도 퀵메뉴의 "맨 위로" 버튼은 항상 표시됩니다.'),
+                TextInput::make('inquiry_retention_months')->label('문의 보유기간(개월)')->numeric()->default(36)
+                    ->helperText('이 기간이 지난 1:1 문의(첨부파일 포함)는 완전히 삭제(파기)됩니다. 0 이하로 두면 영구 보관됩니다.'),
                 ...$categoryFields,
             ]);
     }
@@ -708,6 +711,7 @@ class SiteSettings extends Page
             'email_welcome_enabled' => 'mail', 'email_verification_enabled' => 'mail',
             'email_inquiry_received_admin_enabled' => 'mail', 'email_inquiry_received_user_enabled' => 'mail',
             'email_inquiry_reply_enabled' => 'mail', 'email_password_reset_enabled' => 'mail',
+            'email_find_id_enabled' => 'mail',
             'email_marketing_broadcast_enabled' => 'mail', 'email_policy_change_notice_enabled' => 'mail',
             'login_type' => 'member', 'signup_approval_required' => 'member',
             'signup_field_nickname' => 'member', 'signup_field_phone' => 'member',
@@ -723,6 +727,7 @@ class SiteSettings extends Page
             'kakao_provider' => 'integration', 'kakao_api_key' => 'integration', 'kakao_sender_key' => 'integration',
             'identity_verification_enabled' => 'integration', 'identity_verification_provider' => 'integration',
             'identity_verification_merchant_id' => 'integration', 'identity_verification_api_key' => 'integration',
+            'inquiry_retention_months' => 'general',
             'ai_openai_api_key' => 'ai', 'ai_gemini_api_key' => 'ai', 'ai_chat_retention_days' => 'ai',
             'dormant_processing_enabled' => 'dormant', 'dormant_conversion_months' => 'dormant',
             'forced_withdrawal_months' => 'dormant', 'dormant_notice_days' => 'dormant',
