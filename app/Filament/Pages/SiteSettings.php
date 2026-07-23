@@ -11,6 +11,7 @@ use App\Services\UploadService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -57,6 +58,12 @@ class SiteSettings extends Page
         // {"ko":"...","en":"..."} 형태의 JSON 객체로 저장한다(다른 단순 설정과 다름). 언어별 값을
         // 각각의 가상 필드({key}__{code})로 펼쳐서 폼에 채우고, save()에서 다시 하나로 합친다.
         $activeLocales = Language::query()->where('is_active', true)->pluck('code');
+
+        // 번역 파일(lang/{코드}.json)은 site_settings 테이블이 아니라 파일 자체를 직접 읽고 쓴다 —
+        // 다른 설정들과 저장 방식이 달라 save()에서 이 값들만 따로 분리해 처리한다.
+        foreach ($activeLocales as $code) {
+            $settings["translations__{$code}"] = json_decode(@file_get_contents(lang_path("{$code}.json")) ?: '{}', true) ?: [];
+        }
 
         $categoriesByLocale = json_decode($settings['inquiry_categories'] ?? '{}', true) ?: [];
         unset($settings['inquiry_categories']);
@@ -110,6 +117,7 @@ class SiteSettings extends Page
                         $this->inquiryTab(),
                         $this->maintenanceTab(),
                         $this->vendorNoticeTab(),
+                        $this->translationTab(),
                     ]),
             ])
             ->statePath('data');
@@ -595,6 +603,33 @@ class SiteSettings extends Page
             ]);
     }
 
+    // lang/{코드}.json 번역 파일을 관리자 화면에서 직접 수정할 수 있게 한다(사용자 요청 —
+    // 원래 기획 단계에서 요청했던 항목). 다른 탭과 달리 site_settings 테이블이 아니라
+    // 파일 자체를 읽고 쓰므로 mount()/save() 양쪽에서 예외적으로 분기 처리한다.
+    private function translationTab(): Tab
+    {
+        $languages = Language::query()->where('is_active', true)->orderBy('sort_order')->get();
+
+        $fields = $languages->map(fn (Language $language) => KeyValue::make("translations__{$language->code}")
+            ->label("번역 ({$language->name})")
+            ->keyLabel('원문(한국어 등 코드에 쓰인 문자열)')
+            ->valueLabel('번역문')
+            ->addActionLabel('항목 추가')
+            ->reorderable()
+            ->columnSpanFull())
+            ->all();
+
+        return Tab::make('번역 관리')
+            ->schema([
+                Text::make(
+                    '화면 코드에 쓰인 원문 문자열을 각 언어로 어떻게 표시할지 직접 수정합니다(lang/{언어코드}.json 파일). '.
+                    '기본 언어(한국어)는 원문 자체가 그대로 표시되므로 대부분 비워둡니다. '.
+                    '여기 없는 원문을 새로 번역하고 싶다면 항목을 추가하고 원문을 정확히 그대로 입력하세요(대소문자/띄어쓰기까지 일치해야 합니다).'
+                )->color('gray')->columnSpanFull(),
+                ...$fields,
+            ]);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -632,6 +667,26 @@ class SiteSettings extends Page
     public function save(): void
     {
         $data = $this->form->getState();
+
+        // 번역 파일(translations__{코드})은 site_settings 테이블에 저장하는 나머지 설정과 달리
+        // lang/{코드}.json 파일 자체에 직접 써야 하므로, 아래 공통 저장 루프에 섞이기 전에 먼저
+        // 걸러내 별도로 처리한다. 키가 비어 있는 항목(KeyValue에서 원문을 안 채우고 지운 경우)은
+        // 저장하지 않는다.
+        foreach ($data as $key => $value) {
+            if (! str_starts_with($key, 'translations__')) {
+                continue;
+            }
+
+            $code = substr($key, strlen('translations__'));
+            $translations = collect($value ?? [])->filter(fn ($v, $k) => trim((string) $k) !== '')->all();
+
+            file_put_contents(
+                lang_path("{$code}.json"),
+                json_encode($translations, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+            );
+
+            unset($data[$key]);
+        }
 
         // forced_withdrawal_months가 dormant_conversion_months보다 작거나 같으면, 로그인 후
         // 경과 개월수를 "휴면 전환 예정"과 "강제탈퇴 예정" 양쪽에서 동시에 넘긴 상태가 되어버려
