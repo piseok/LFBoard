@@ -28,6 +28,11 @@ class ResetPasswordController extends Controller
      */
     protected $redirectTo = '/';
 
+    public function __construct()
+    {
+        $this->middleware('guest');
+    }
+
     // 비밀번호 찾기(재설정)로 바꾼 경우도 "비밀번호를 변경했다"는 사실은 동일하므로 함께 갱신한다.
     protected function setUserPassword($user, $password)
     {

@@ -12,6 +12,11 @@ use Illuminate\Http\Request;
 
 class FindIdController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('guest');
+    }
+
     public function create(): View
     {
         return view('auth.find-id', ['pageTitle' => __('아이디 찾기')]);
