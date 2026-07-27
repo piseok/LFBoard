@@ -65,8 +65,8 @@ class FrontController extends Controller
     }
 
     // 검색엔진용 sitemap.xml(SeoController)과 별개로, 사람이 브라우저에서 전체 사이트 구조를
-    // 볼 수 있는 화면. hidden_from_header 메뉴(예: 마이페이지 그룹 — GNB에서만 숨김)도 실제로는
-    // 접근 가능한 페이지이므로 partials.layout.menu-items와 달리 여기서는 숨기지 않고 그대로 보여준다.
+    // 볼 수 있는 화면. hidden_from_header 필터링은 sitemap.tree 뷰에서 partials.layout.menu-items와
+    // 동일하게 처리한다(사용자 확정 사항: 상단메뉴와 사이트맵이 항상 똑같이 보여야 함).
     public function sitemap(): View
     {
         $userLevel = auth()->user()?->level ?? User::LEVEL_GUEST;
