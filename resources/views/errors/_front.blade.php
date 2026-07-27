@@ -10,7 +10,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title }} | {{ $siteName }}</title>
+    <link rel="preload" href="{{ asset('fonts/vendor/pretendard/PretendardVariable.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ asset('css/vendor/pretendard/pretendard.css') }}">
     <link rel="stylesheet" href="{{ asset('css/frontend.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/sub.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/board.css') }}">
 </head>
 <body>
     @include('partials.layout.header')
