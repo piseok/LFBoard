@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMS Admin — ERD (공통, 전체)</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --border: #dfe3ea;
+    --ink: #1b2333;
+    --ink-muted: #5b6472;
+    --accent: #3454d1;
+    --accent-soft: #eaeefc;
+    --mono-bg: #eef1f6;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c;
+      --surface: #1a1f2b;
+      --border: #2b3140;
+      --ink: #e7eaf0;
+      --ink-muted: #97a1b3;
+      --accent: #7d94ff;
+      --accent-soft: #232c47;
+      --mono-bg: #0f1420;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Pretendard Variable", -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    line-height: 1.6;
+    padding: 40px 24px 80px;
+    margin: 0;
+  }
+
+  .wrap { max-width: 1200px; margin: 0 auto; }
+
+  header { margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+  .eyebrow {
+    font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin: 0 0 10px;
+  }
+
+  h1 { font-size: 1.9rem; font-weight: 800; margin: 0 0 10px; letter-spacing: -0.01em; }
+
+  header p { color: var(--ink-muted); max-width: 720px; margin: 0; font-size: 0.96rem; }
+
+  .notice {
+    margin-top: 18px; padding: 10px 14px; border-radius: 10px;
+    background: var(--accent-soft); color: var(--ink); font-size: 0.82rem;
+  }
+
+  .print-btn {
+    margin-top: 16px; display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink); font-size: 0.85rem; cursor: pointer;
+  }
+  .print-btn:hover { background: var(--accent-soft); }
+
+  section.diagram-section {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px; margin-bottom: 28px;
+  }
+
+  section.diagram-section h2 { font-size: 1.2rem; font-weight: 700; margin: 0 0 4px; }
+  section.diagram-section .desc { color: var(--ink-muted); font-size: 0.88rem; margin: 0 0 20px; }
+
+  .diagram-scroll { overflow-x: auto; padding: 8px 0; }
+  .diagram-scroll pre.mermaid { min-width: 640px; }
+
+  code, .mono {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    background: var(--mono-bg); padding: 1px 6px; border-radius: 5px; font-size: 0.86em;
+  }
+
+  footer { color: var(--ink-muted); font-size: 0.82rem; text-align: center; margin-top: 40px; }
+  
+  @media print {
+    body { background: #fff !important; color: #000 !important; padding: 12px !important; }
+    .notice { display: none; }
+    section.diagram-section { break-inside: avoid; border-color: #999 !important; background: #fff !important; }
+    .diagram-scroll { overflow: visible !important; }
+    .diagram-scroll pre.mermaid svg { max-width: none !important; }
+    a[href]::after { content: ""; }
+  }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Database Schema — Full ERD</p>
+    <h1>CMS Admin — ERD (공통, 전체)</h1>
+    <p>공통 CMS 스키마 전체 28개 테이블을 컬럼까지 빠짐없이 담은 다이어그램입니다 (관계가 없는 독립 테이블도 모두 포함). dev·LFboard 등 LMS 기능이 없는 브랜치 기준.</p>
+    <p class="notice">⚠️ 이 문서는 마이그레이션으로 스키마가 바뀔 때마다 함께 업데이트해야 합니다 (PROJECT.md &gt; DB 규칙 참고).</p>
+    <button class="print-btn" onclick="window.print()">🖨 인쇄 / PDF로 저장</button>
+  </header>
+  <section class="diagram-section">
+    <h2>CMS 공통 스키마 (전체)</h2>
+    <p class="desc">전체 28개 테이블 · 관계가 없는 독립 테이블: <code>languages</code>, <code>ip_country_ranges</code>, <code>site_settings</code>, <code>email_templates</code>, <code>policies</code>, <code>popups</code>, <code>banners</code>, <code>banned_words</code>, <code>pages</code></p>
+    <div class="diagram-scroll">
+<pre class="mermaid">
+erDiagram
+    users ||--o{ user_login_countries : "로그인기록"
+    users ||--o{ social_accounts : "연동"
+    users ||--o{ policy_consents : "동의"
+    users ||--o{ admin_audit_logs : "수행"
+    menus ||--o{ menus : "하위메뉴"
+    boards ||--o{ board_categories : "분류"
+    boards ||--o{ posts : "소속"
+    users ||--o{ posts : "작성"
+    board_categories ||--o{ posts : "분류"
+    posts ||--o{ post_files : "첨부"
+    posts ||--o{ comments : "댓글"
+    users ||--o{ comments : "작성"
+    comments ||--o{ comments : "대댓글"
+    users ||--o{ inquiries : "문의"
+    users ||--o{ media_files : "업로드"
+    users ||--o{ maintenance_reports : "작성"
+    users ||--o{ marketing_mail_logs : "발송"
+    users ||--o{ visit_logs : "방문"
+    users ||--o{ ai_chat_conversations : "대화"
+    ai_chat_conversations ||--o{ ai_chat_messages : "메시지"
+    vendor_notices ||--o{ users : "마지막확인"
+
+    users {
+        bigint id PK "기본 키"
+        varchar name "이름"
+        varchar username "아이디(로그인용, 선택)"
+        varchar email "이메일(로그인 ID로도 사용)"
+        varchar locale "선호 언어(로케일)"
+        timestamp email_verified_at "이메일 인증일시"
+        varchar password "비밀번호(해시)"
+        timestamp password_changed_at "비밀번호 마지막 변경일시"
+        tinyint level "회원 등급(0=게스트, 관리자는 admin_role로 구분)"
+        varchar admin_role "관리자 역할(super 등, 일반회원은 null)"
+        json admin_permissions "관리자 개별 권한 목록(JSON)"
+        bigint vendor_notice_last_seen_id FK "마지막으로 확인한 유지보수 업체 공지 ID"
+        json admin_locale_scope "관리자가 관리 가능한 언어 범위(JSON)"
+        json admin_board_scope "관리자가 관리 가능한 게시판 범위(JSON)"
+        text two_factor_secret "2단계 인증(TOTP) 비밀키(암호화)"
+        text two_factor_recovery_codes "2단계 인증 복구코드(암호화, JSON)"
+        varchar phone "연락처"
+        varchar nickname "닉네임"
+        varchar gender "성별"
+        date birthdate "생년월일"
+        varchar homepage "홈페이지 URL"
+        varchar address "주소"
+        text memo "관리자 메모"
+        tinyint is_active "활성화 여부(정지/탈퇴 시 false)"
+        tinyint marketing_agreed "마케팅 수신 동의 여부"
+        timestamp marketing_agreed_at "마케팅 수신 동의일시"
+        varchar unsubscribe_token "메일 수신거부 링크용 토큰"
+        timestamp last_login_at "마지막 로그인일시(휴면 판정 기준)"
+        timestamp dormant_at "휴면 전환일시"
+        timestamp dormant_notice_sent_at "휴면 전환 사전 안내 발송일시"
+        timestamp withdrawal_notice_sent_at "휴면 후 탈퇴(익명화) 사전 안내 발송일시"
+        varchar ci "본인확인기관 연계정보(CI, 암호화)"
+        varchar di "본인확인기관 중복가입확인정보(DI, 암호화)"
+        timestamp phone_verified_at "휴대폰 본인인증 완료일시"
+        varchar remember_token "로그인 유지(remember me) 토큰"
+        timestamp created_at "가입일시"
+        timestamp updated_at "수정일시"
+        timestamp deleted_at "소프트 삭제(탈퇴)일시"
+    }
+    languages {
+        bigint id PK "기본 키"
+        varchar code "언어코드(ko/en/ja 등)"
+        varchar timezone "해당 언어 기본 표시 시간대"
+        varchar name "언어명"
+        tinyint is_default "기본 언어 여부"
+        tinyint is_active "활성화 여부"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    ip_country_ranges {
+        bigint id PK "기본 키"
+        int ip_start "IP 대역 시작(정수 변환값)"
+        int ip_end "IP 대역 끝(정수 변환값)"
+        varchar country_code "국가코드(ISO 2자리)"
+    }
+    user_login_countries {
+        bigint id PK "기본 키"
+        bigint user_id FK "회원"
+        varchar country_code "접속 국가코드(ISO 2자리)"
+        varchar country_name "접속 국가명"
+        timestamp first_seen_at "해당 국가에서 처음 접속한 일시"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    social_accounts {
+        bigint id PK "기본 키"
+        bigint user_id FK "연결된 회원"
+        varchar provider "소셜 제공자(kakao/naver 등)"
+        varchar provider_id "제공자측 고유 ID"
+        text access_token "액세스 토큰"
+        text refresh_token "리프레시 토큰"
+        timestamp created_at "연동일시"
+        timestamp updated_at "수정일시"
+    }
+    policy_consents {
+        bigint id PK "기본 키"
+        bigint user_id FK "동의한 회원"
+        varchar type "동의한 약관 종류"
+        varchar locale "동의 시점 언어(로케일)"
+        varchar version "동의한 약관 버전"
+        timestamp agreed_at "동의일시"
+    }
+    admin_audit_logs {
+        bigint id PK "기본 키"
+        bigint admin_user_id FK "행위자 관리자 user_id(탈퇴 시 null)"
+        varchar admin_name "행위 당시 관리자 이름 스냅샷(탈퇴 후에도 누가 했는지 남기기 위함)"
+        varchar action "수행한 동작(created/updated/deleted 등)"
+        varchar auditable_type "대상 모델 클래스명(다형 관계)"
+        bigint auditable_id "대상 레코드 ID"
+        varchar auditable_label "대상을 사람이 알아볼 수 있는 라벨(제목 등)"
+        varchar ip "요청 IP"
+        varchar url "요청 URL"
+        json before "변경 전 값(JSON)"
+        json changes "변경 후 값(JSON)"
+        timestamp created_at "기록 일시"
+    }
+    site_settings {
+        bigint id PK "기본 키"
+        varchar key "설정 키"
+        longtext value "설정 값"
+        varchar group "설정 그룹(탭 구분)"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    email_templates {
+        bigint id PK "기본 키"
+        varchar type "템플릿 종류(발송 트리거)"
+        varchar locale "언어(로케일)"
+        varchar name "템플릿명"
+        varchar subject "메일 제목"
+        longtext body "메일 본문(HTML)"
+        tinyint is_active "활성화 여부"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    menus {
+        bigint id PK "기본 키"
+        bigint parent_id FK "상위 메뉴(최상위면 null)"
+        varchar title "메뉴명"
+        varchar locale "언어(로케일)"
+        varchar slug "식별용 슬러그"
+        varchar type "연결 대상 유형(board/page/url/none)"
+        bigint target_id "연결 대상 ID(게시판/페이지 등)"
+        varchar url "직접 URL(type=url인 경우)"
+        varchar target "링크 열림 방식(_self/_blank)"
+        tinyint min_level "노출 최소 회원등급"
+        varchar access_mode "레벨 미달 시 처리 방식(hidden=숨김/locked=잠금표시)"
+        tinyint hidden_from_header "상단메뉴(GNB)에서만 숨김 여부(사이트맵에도 동일 적용)"
+        int sort_order "정렬 순서"
+        tinyint is_active "활성화 여부"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    boards {
+        bigint id PK "기본 키"
+        varchar name "게시판명"
+        varchar slug "URL 식별자"
+        varchar locale "언어(로케일)"
+        varchar skin "목록 화면 스킨(list/gallery/faq/custom-fields 등)"
+        varchar layout "레이아웃 방식"
+        tinyint use_editor "에디터 사용 여부"
+        tinyint allow_comment "댓글 허용 여부"
+        tinyint allow_reply "답글 허용 여부"
+        tinyint allow_file "첨부파일 허용 여부"
+        tinyint allow_anonymous "비회원 글쓰기 허용 여부"
+        tinyint allow_image_upload "본문 이미지 업로드 허용 여부"
+        tinyint use_captcha "캡차 사용 여부"
+        tinyint requires_identity_verification "본인인증 필요 여부"
+        text identity_verification_consent_text "본인인증 동의 안내 문구"
+        tinyint min_read_level "읽기 최소 회원등급"
+        tinyint min_write_level "쓰기 최소 회원등급"
+        tinyint min_comment_level "댓글 최소 회원등급"
+        tinyint files_per_post "글당 첨부파일 최대 개수"
+        tinyint per_page "페이지당 게시글 수"
+        varchar order_by "정렬 기준(latest/views 등)"
+        text description "게시판 설명"
+        tinyint is_active "활성화 여부"
+        tinyint exclude_from_search "통합검색 제외 여부"
+        json custom_field_schema "게시판별 커스텀 필드 정의(JSON)"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    board_categories {
+        bigint id PK "기본 키"
+        bigint board_id FK "소속 게시판"
+        varchar name "카테고리명"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    posts {
+        bigint id PK "기본 키"
+        bigint board_id FK "소속 게시판"
+        bigint user_id FK "작성 회원(비회원 작성 시 null)"
+        bigint category_id FK "게시판 카테고리"
+        varchar title "제목"
+        longtext content "본문"
+        varchar author_name "비회원 작성자명"
+        varchar author_password "비회원 작성 비밀번호(해시)"
+        varchar ip "작성 IP"
+        int views "조회수"
+        tinyint is_global_notice "전체 게시판 공통 공지 여부"
+        tinyint is_notice "게시판 내 공지 여부"
+        tinyint is_secret "비밀글 여부"
+        tinyint is_active "노출 여부(삭제 시 false)"
+        tinyint is_draft "임시저장 여부"
+        timestamp recruitment_start_at "모집(접수) 시작일시"
+        timestamp recruitment_end_at "모집(접수) 마감일시"
+        json custom_fields "게시판별 커스텀 필드 값(JSON)"
+        timestamp created_at "작성일시"
+        timestamp updated_at "수정일시"
+        timestamp deleted_at "소프트 삭제일시"
+    }
+    post_files {
+        bigint id PK "기본 키"
+        bigint post_id FK "소속 게시글"
+        varchar original_name "원본 파일명"
+        varchar stored_name "저장된 파일명"
+        varchar file_path "저장 경로"
+        int file_size "파일 크기(byte)"
+        varchar mime_type "MIME 타입"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    comments {
+        bigint id PK "기본 키"
+        bigint post_id FK "소속 게시글"
+        bigint user_id FK "작성 회원(비회원 작성 시 null)"
+        bigint parent_id FK "부모 댓글(대댓글인 경우)"
+        tinyint depth "댓글 깊이(0=댓글, 1=대댓글)"
+        text content "댓글 내용"
+        varchar author_name "비회원 작성자명"
+        varchar author_password "비회원 작성 비밀번호(해시)"
+        varchar ip "작성 IP"
+        tinyint is_active "노출 여부(삭제 시 false)"
+        timestamp created_at "작성일시"
+        timestamp updated_at "수정일시"
+        timestamp deleted_at "소프트 삭제일시"
+    }
+    policies {
+        bigint id PK "기본 키"
+        varchar type "약관 종류(이용약관/개인정보처리방침 등)"
+        varchar locale "언어(로케일)"
+        varchar title "약관 제목"
+        longtext content "현재 게시 중인 본문(content_type=editor)"
+        varchar content_type "콘텐츠 작성 방식(editor/html_file)"
+        varchar html_file_path "현재 게시 중인 HTML 파일 경로(content_type=html_file)"
+        tinyint is_required "가입/이용 시 필수 동의 여부"
+        tinyint is_active "활성화 여부"
+        varchar version "현재 게시 중인 버전"
+        varchar pending_version "예약된 다음 버전(사전고지 중인 개정판)"
+        varchar pending_title "예약된 다음 버전 제목"
+        longtext pending_content "예약된 다음 버전 본문"
+        varchar pending_content_type "예약된 다음 버전 콘텐츠 작성 방식"
+        varchar pending_html_file_path "예약된 다음 버전 HTML 파일 경로"
+        timestamp effective_at "예약된 다음 버전 시행일시(도래 시 자동 적용)"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    popups {
+        bigint id PK "기본 키"
+        varchar title "팝업 제목(관리용)"
+        varchar locale "언어(로케일)"
+        varchar content_type "콘텐츠 유형(image/html)"
+        varchar image_path "팝업 이미지 경로"
+        longtext html_content "HTML 직접 입력 콘텐츠"
+        varchar position "노출 위치(center 등)"
+        int width "팝업 너비(px)"
+        int height "팝업 높이(px)"
+        datetime started_at "노출 시작일시"
+        datetime ended_at "노출 종료일시"
+        tinyint is_active "활성화 여부"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    banners {
+        bigint id PK "기본 키"
+        varchar group_key "배너 노출 위치 그룹(메인 상단/푸터 등)"
+        varchar content_type "콘텐츠 유형(image/html)"
+        varchar locale "언어(로케일)"
+        varchar title "배너 제목(관리용/대체텍스트 참고용)"
+        varchar image_path "배너 이미지 경로"
+        longtext html_content "HTML 직접 입력 콘텐츠(content_type=html일 때)"
+        varchar link_url "클릭 시 이동할 링크"
+        varchar link_target "링크 열림 방식(_blank/_self)"
+        varchar alt_text "이미지 대체텍스트"
+        json captions "슬라이드 캡션 등 부가 정보(JSON)"
+        datetime started_at "노출 시작일시"
+        datetime ended_at "노출 종료일시"
+        int click_count "클릭 수"
+        tinyint is_active "노출 활성화 여부"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    banned_words {
+        bigint id PK "기본 키"
+        varchar word "금칙어"
+        varchar type "적용 범위(all 등)"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    inquiries {
+        bigint id PK "기본 키"
+        bigint user_id FK "작성 회원(비회원 작성 시 null)"
+        varchar type "문의 유형"
+        varchar locale "언어(로케일)"
+        varchar category "세부 카테고리"
+        varchar name "작성자명"
+        varchar email "연락 이메일"
+        varchar phone "연락처"
+        varchar author_password "비회원 작성 비밀번호(해시)"
+        varchar title "문의 제목"
+        longtext content "문의 내용"
+        varchar file_path "첨부파일 경로"
+        varchar status "처리 상태(pending 등)"
+        longtext admin_reply "관리자 답변 내용"
+        timestamp replied_at "답변일시"
+        tinyint is_active "노출 여부"
+        timestamp created_at "작성일시"
+        timestamp updated_at "수정일시"
+        timestamp deleted_at "소프트 삭제일시"
+    }
+    media_files {
+        bigint id PK "기본 키"
+        bigint user_id FK "업로드한 관리자/회원"
+        varchar original_name "원본 파일명"
+        varchar stored_name "저장된 파일명"
+        varchar file_path "저장 경로"
+        int file_size "파일 크기(byte)"
+        varchar mime_type "MIME 타입"
+        varchar alt_text "대체텍스트"
+        int download_count "다운로드/사용 횟수"
+        timestamp created_at "업로드일시"
+        timestamp updated_at "수정일시"
+    }
+    maintenance_reports {
+        bigint id PK "기본 키"
+        bigint user_id FK "작성 관리자"
+        varchar title "보고서 제목"
+        longtext content "보고서 내용"
+        varchar report_type "보고서 유형(notice 등)"
+        tinyint is_sent "발송(공지) 완료 여부"
+        datetime sent_at "발송일시"
+        text send_response "발송 결과 응답 로그"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    marketing_mail_logs {
+        bigint id PK "기본 키"
+        varchar subject "발송 메일 제목"
+        longtext content "발송 메일 본문"
+        int sent_count "발송 성공 건수"
+        int failed_count "발송 실패 건수"
+        bigint sent_by FK "발송한 관리자 ID"
+        datetime sent_at "발송일시"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    vendor_notices {
+        bigint id PK "기본 키"
+        varchar external_id "유지보수 업체측 원본 공지 ID(중복 동기화 방지)"
+        varchar title "공지 제목"
+        varchar url "원본 공지 링크"
+        timestamp published_at "공지 게시일시"
+        timestamp created_at "동기화 수집일시"
+        timestamp updated_at "수정일시"
+    }
+    visit_logs {
+        bigint id PK "기본 키"
+        date date "방문 일자(일별 집계 기준)"
+        varchar ip "방문자 IP"
+        bigint user_id FK "로그인 회원(비로그인 시 null)"
+        varchar path "방문 경로(URL path)"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+    }
+    ai_chat_conversations {
+        bigint id PK "기본 키"
+        bigint user_id FK "대화 소유 회원"
+        varchar provider "AI 제공자(openai/gemini)"
+        varchar title "대화방 제목"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+        timestamp deleted_at "소프트 삭제일시"
+    }
+    ai_chat_messages {
+        bigint id PK "기본 키"
+        bigint conversation_id FK "소속 대화방"
+        varchar role "발화자(user/assistant)"
+        text content "메시지 본문"
+        varchar image_path "첨부 이미지 경로(있는 경우)"
+        timestamp created_at "전송일시"
+    }
+    pages {
+        bigint id PK "기본 키"
+        varchar title "페이지 제목"
+        varchar slug "URL 식별자"
+        varchar locale "언어(로케일)"
+        varchar content_type "콘텐츠 작성 방식(editor/html_file)"
+        longtext content "에디터로 작성한 본문(content_type=editor)"
+        varchar html_file_path "업로드한 HTML 파일 경로(content_type=html_file)"
+        varchar meta_title "SEO 메타 타이틀"
+        varchar meta_description "SEO 메타 설명"
+        varchar meta_keywords "SEO 메타 키워드"
+        varchar og_image "SNS 공유용 OG 이미지"
+        tinyint min_level "열람 최소 회원등급"
+        tinyint is_active "활성화 여부"
+        int sort_order "정렬 순서"
+        timestamp created_at "생성일시"
+        timestamp updated_at "수정일시"
+        timestamp deleted_at "소프트 삭제일시"
+    }
+</pre>
+    </div>
+  </section>
+
+  <footer>전체 컬럼 설명은 DB 스키마 COMMENT 또는 <code>docs/table-spec.md</code> 참고</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
+    themeVariables: { fontFamily: '"Pretendard Variable", -apple-system, sans-serif' },
+  });
+  window.addEventListener('beforeprint', function () {
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+    document.querySelectorAll('pre.mermaid[data-processed]').forEach(function (el) { el.removeAttribute('data-processed'); });
+  });
+</script>
+</body>
+</html>
