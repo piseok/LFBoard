@@ -129,7 +129,7 @@ class UserResource extends Resource
                             'visit_stats' => '방문자통계',
                             'ai_assistant' => 'AI 비서',
                         ])
-                        ->helperText('시스템 설정 그룹(메뉴관리, 약관/방침, 금지어, 사이트 설정 등)은 위험도가 높아 일반관리자·일반 최고관리자에게 부여할 수 없으며, 슈퍼관리자만 접근할 수 있습니다. "운영 관리" 그룹(약관/방침, 관리자 활동로그, AI 대화로그, 유지보수 리포트)은 일반 최고관리자에게 항상 자동으로 열려 있습니다.')
+                        ->helperText('시스템 설정 그룹(메뉴관리, 금지어, 사이트 설정 등)은 위험도가 높아 일반관리자·일반 최고관리자에게 부여할 수 없으며, 슈퍼관리자만 접근할 수 있습니다. "운영 관리" 그룹(약관/방침, 관리자 활동로그, AI 대화로그, 유지보수 리포트)은 일반 최고관리자에게 항상 자동으로 열려 있습니다.')
                         ->columns(2)
                         ->visible(fn (callable $get) => in_array($get('admin_role'), ['manager', 'client'], true)),
                     Select::make('admin_locale_scope')
