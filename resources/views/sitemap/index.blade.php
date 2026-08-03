@@ -1,7 +1,7 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <h1 class="page-title">{{ __('사이트맵') }}</h1>
+    <x-sub-header :title="__('사이트맵')" />
 
     <nav class="sitemap-tree" aria-label="{{ __('사이트맵') }}">
         <ul>

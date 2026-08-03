@@ -11,7 +11,7 @@
 
 @section('content')
     <div style="max-width: 480px; margin: 0 auto;">
-        <h1 class="page-title">{{ __('회원정보 수정') }}</h1>
+        <x-sub-header :title="__('회원정보 수정')" />
 
         @if ($identityLocked)
             <div class="form-group" style="background: var(--color-gray-50, #f9fafb); padding: 16px; border-radius: 8px;">

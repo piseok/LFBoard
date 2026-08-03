@@ -1,14 +1,16 @@
 @extends('layouts.app')
 
 @section('content')
-    <h1 class="page-title">{{ $pageTitle }}</h1>
-
-    <nav class="board-category-filter" aria-label="{{ __('게시판별 보기') }}">
-        <a href="{{ front_route('community.index') }}" class="{{ $activeBoardSlug === '' ? 'is-active' : '' }}">{{ __('전체') }}</a>
-        @foreach ($boards as $board)
-            <a href="{{ front_route('community.index', ['board' => $board->slug]) }}" class="{{ $activeBoardSlug === $board->slug ? 'is-active' : '' }}">{{ $board->name }}</a>
-        @endforeach
-    </nav>
+    <x-sub-header :title="$pageTitle">
+        <x-slot:nav>
+            <nav class="board-category-filter" aria-label="{{ __('게시판별 보기') }}">
+                <a href="{{ front_route('community.index') }}" class="{{ $activeBoardSlug === '' ? 'is-active' : '' }}">{{ __('전체') }}</a>
+                @foreach ($boards as $board)
+                    <a href="{{ front_route('community.index', ['board' => $board->slug]) }}" class="{{ $activeBoardSlug === $board->slug ? 'is-active' : '' }}">{{ $board->name }}</a>
+                @endforeach
+            </nav>
+        </x-slot:nav>
+    </x-sub-header>
 
     <div class="board-toolbar">
         <form method="GET" action="{{ front_route('community.index') }}" class="board-search-form">

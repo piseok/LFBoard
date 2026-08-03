@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <h1 class="page-title">{{ __('통합검색') }}</h1>
+    <x-sub-header :title="__('통합검색')" />
 
     <div class="board-toolbar">
         <form method="GET" action="{{ front_route('search.index') }}" class="board-search-form">

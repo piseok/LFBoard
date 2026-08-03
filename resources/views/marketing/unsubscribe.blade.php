@@ -2,7 +2,7 @@
 
 @section('content')
     <div style="max-width: 480px; margin: 0 auto; text-align: center;">
-        <h1 class="page-title">{{ __('수신 거부') }}</h1>
+        <x-sub-header :title="__('수신 거부')" />
 
         @if ($success)
             <p>{{ __('마케팅 정보 수신이 정상적으로 거부 처리되었습니다.') }}</p>

@@ -1,7 +1,7 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <h1 class="page-title">{{ __('1:1 상담') }}</h1>
+    <x-sub-header :title="__('1:1 상담')" />
 
     @auth
         <div class="board-toolbar">

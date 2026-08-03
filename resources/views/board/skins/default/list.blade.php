@@ -1,21 +1,19 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <h1 class="page-title">{{ $board->name }}</h1>
-
-    @if ($board->description)
-        <p class="post-meta">{{ $board->description }}</p>
-    @endif
-
-    @if ($categories->isNotEmpty())
-        <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
-            <a href="{{ front_route('board.index', $board->slug) }}" class="{{ request()->filled('category') ? '' : 'is-active' }}">{{ __('전체') }}</a>
-            @foreach ($categories as $category)
-                <a href="{{ front_route('board.index', ['slug' => $board->slug, 'category' => $category->id]) }}"
-                   class="{{ (int) request('category') === $category->id ? 'is-active' : '' }}">{{ $category->name }}</a>
-            @endforeach
-        </nav>
-    @endif
+    <x-sub-header :title="$board->name" :description="$board->description">
+        @if ($categories->isNotEmpty())
+            <x-slot:nav>
+                <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
+                    <a href="{{ front_route('board.index', $board->slug) }}" class="{{ request()->filled('category') ? '' : 'is-active' }}">{{ __('전체') }}</a>
+                    @foreach ($categories as $category)
+                        <a href="{{ front_route('board.index', ['slug' => $board->slug, 'category' => $category->id]) }}"
+                           class="{{ (int) request('category') === $category->id ? 'is-active' : '' }}">{{ $category->name }}</a>
+                    @endforeach
+                </nav>
+            </x-slot:nav>
+        @endif
+    </x-sub-header>
 
     <div class="board-toolbar">
       <div class="board-toolbar-left">

@@ -6,7 +6,9 @@
     사용법:
         @extends('layouts.subpage')
         @section('subcontent')
-            <h1 class="page-title">...</h1>
+            <x-sub-header title="...">
+                <x-slot:nav>...</x-slot:nav> // 필요할 때만
+            </x-sub-header>
             ...
         @endsection
 

@@ -20,6 +20,14 @@
     --color-gray: #777;
     --radius: 10px;
     --transition: .3s ease;
+
+    /* 버튼/폼 컨트롤 공용 토큰 — .btn과 헤더/푸터 카드(--radius:10px)는 다른 컴포넌트 패밀리라 반경을 분리해둔다 */
+    --radius-control: 6px;
+    --color-primary-soft: #fdf3e7;
+    --color-primary-ring: rgba(180, 83, 9, .35);
+    --color-danger-ring: rgba(220, 38, 38, .35);
+    --color-danger-dark: #b91c1c;
+    --control-transition: .15s ease;
 }
 
 * { box-sizing: border-box; }
@@ -148,20 +156,108 @@ img { max-width: 100%; height: auto; }
 .logout-form { display: inline-block; margin: 0; }
 
 .btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: var(--radius-control);
     border: 1px solid var(--color-border);
     background: #fff;
     color: var(--color-text);
     font-size: 0.9rem;
+    font-family: inherit;
+    line-height: 1.4;
     cursor: pointer;
+    transition: background var(--control-transition), border-color var(--control-transition), color var(--control-transition);
 }
 .btn:hover { background: var(--color-bg-alt); text-decoration: none; }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--color-primary-ring); }
+.btn:disabled, .btn.is-disabled { opacity: .55; cursor: not-allowed; pointer-events: none; }
+
 .btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
-.btn-primary:hover { background: var(--color-primary-dark); }
+.btn-primary:hover { background: var(--color-primary-dark); border-color: var(--color-primary-dark); }
+
+.btn-outline { background: #fff; border-color: var(--color-primary); color: var(--color-primary); }
+.btn-outline:hover { background: var(--color-primary-soft); }
+
 .btn-danger { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.btn-danger:hover { background: var(--color-danger-dark); border-color: var(--color-danger-dark); }
+.btn-danger:focus-visible { box-shadow: 0 0 0 3px var(--color-danger-ring); }
+
+.btn-ghost { background: transparent; border-color: transparent; color: var(--color-primary); }
+.btn-ghost:hover { background: var(--color-primary-soft); text-decoration: none; }
+
 .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+.btn-lg { padding: 12px 24px; font-size: 1rem; }
+.btn-block { width: 100%; }
+
+/* 폼 컨트롤 — input[type=text/email/password/tel/number/url/date/search]/textarea/select 공용 */
+input[type="text"], input[type="email"], input[type="password"],
+input[type="tel"], input[type="number"], input[type="url"],
+input[type="date"], input[type="search"],
+textarea, select {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    color: var(--color-text);
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    line-height: 1.5;
+    transition: border-color var(--control-transition), box-shadow var(--control-transition);
+}
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-ring);
+}
+input:disabled, textarea:disabled, select:disabled,
+input[readonly], textarea[readonly] {
+    background: var(--color-bg-alt);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+}
+textarea { min-height: 160px; resize: vertical; }
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+/* 유효성 에러 상태 — 서버 검증 실패 시에만 부여(네이티브 :invalid는 페이지 진입 즉시 걸려서 쓰지 않음).
+   예: <input class="{{ $errors->has('email') ? 'is-invalid' : '' }}" ...> */
+input.is-invalid, select.is-invalid, textarea.is-invalid,
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+    border-color: var(--color-danger);
+}
+input.is-invalid:focus, select.is-invalid:focus, textarea.is-invalid:focus,
+input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus, textarea[aria-invalid="true"]:focus {
+    box-shadow: 0 0 0 3px var(--color-danger-ring);
+}
+
+/* 체크박스 / 라디오 */
+input[type="checkbox"], input[type="radio"] {
+    accent-color: var(--color-primary);
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    cursor: pointer;
+}
+input[type="checkbox"]:disabled, input[type="radio"]:disabled {
+    cursor: not-allowed;
+    opacity: .5;
+}
+
+/* 체크박스/라디오 전용 래퍼 — .form-group label(font-weight:600, 필드명용)과는 별개로,
+   "이용약관에 동의합니다" 같은 체크박스 라벨이 헤딩처럼 보이지 않도록 분리한다 */
+.form-check { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.form-check label { font-weight: 400; margin-bottom: 0; font-size: 0.9rem; cursor: pointer; }
+.form-check:has(input:disabled) label { color: var(--color-text-muted); cursor: not-allowed; }
 
 .social-login { margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
 .social-login .btn { width: 100%; text-align: center; box-sizing: border-box; }

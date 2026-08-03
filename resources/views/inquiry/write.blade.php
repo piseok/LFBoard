@@ -1,7 +1,7 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <h1 class="page-title">{{ __('1:1 상담 작성') }}</h1>
+    <x-sub-header :title="__('1:1 상담 작성')" />
 
     <form method="POST" action="{{ front_route('inquiry.store') }}" enctype="multipart/form-data" style="max-width: 560px;">
         @csrf

@@ -63,9 +63,23 @@
 .local-nav-sub li a:hover, .local-nav-sub li a:focus-visible { background: var(--color-bg-alt); text-decoration: none; }
 .local-nav-sub li.is-active a { color: var(--color-primary); font-weight: 600; }
 
+/* 서브페이지 상단 헤더 — <x-sub-header> 컴포넌트 전용. 내부 h1/p/nav는 기존
+   .page-title/.post-meta/.board-category-filter 클래스를 그대로 재사용하고, 여기서는
+   컴포넌트 안에서의 간격만 조정한다(각 클래스 자체의 스타일은 건드리지 않음). */
+.sub-header { margin-bottom: 24px; }
+.sub-header .page-title { margin-bottom: 8px; }
+.sub-header .page-title:last-child { margin-bottom: 0; }
+.sub-header .post-meta { margin-bottom: 16px; }
+.sub-header .board-category-filter {
+    margin-bottom: 0;
+    border-top: 1px solid var(--color-border);
+    padding-top: 12px;
+}
+
 @media (max-width: 768px) {
     .content-layout { flex-direction: column; }
     .local-nav { width: 100%; }
+    .sub-header { margin-bottom: 16px; }
 }
 
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
@@ -76,19 +90,11 @@
 .badge-danger { background: #fee2e2; color: var(--color-danger); }
 .badge-warning { background: #fef3c7; color: #92400e; }
 
-/* 폼 */
+/* 폼 — 컨트롤 자체의 시각 스타일(테두리/포커스/색)은 frontend.css 공통 버튼·폼 컨트롤 섹션 참고.
+   여기는 레이아웃/간격 규칙만 남긴다. */
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
 .form-group .hint { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px; }
-input[type=text], input[type=email], input[type=password], input[type=tel], input[type=number], input[type=url], input[type=date], textarea, select {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    font-size: 0.95rem;
-    font-family: inherit;
-}
-textarea { min-height: 160px; }
 .form-error { color: var(--color-danger); font-size: 0.82rem; margin-top: 4px; }
 .form-actions { margin-top: 20px; display: flex; gap: 8px; }
 

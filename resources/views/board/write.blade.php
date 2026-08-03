@@ -1,12 +1,12 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <h1 class="page-title">
+    <x-sub-header>
         {{ $post ? __('글 수정') : __('글쓰기') }}
         @if ($post && $post->is_draft)
             <span class="badge badge-warning">{{ __('임시저장') }}</span>
         @endif
-    </h1>
+    </x-sub-header>
 
     @if (! $post && $drafts->isNotEmpty())
         <details class="draft-loader">

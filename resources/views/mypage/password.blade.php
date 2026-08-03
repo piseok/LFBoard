@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <h1 class="page-title">{{ __('비밀번호 변경') }}</h1>
+    <x-sub-header :title="__('비밀번호 변경')" />
 
     <div style="max-width: 420px;">
         <form method="POST" action="{{ front_route('mypage.password.update') }}">

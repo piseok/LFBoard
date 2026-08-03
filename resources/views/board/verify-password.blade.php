@@ -1,8 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <h1 class="page-title">{{ __('비밀번호 확인') }}</h1>
-    <p class="post-meta">{{ __('본인 확인을 위해 작성 시 입력한 비밀번호를 입력해 주세요.') }}</p>
+    <x-sub-header :title="__('비밀번호 확인')" :description="__('본인 확인을 위해 작성 시 입력한 비밀번호를 입력해 주세요.')" />
 
     <form method="POST" action="{{ front_route('board.verify', ['slug' => $slug, 'id' => $id]) }}" style="max-width: 360px;">
         @csrf
