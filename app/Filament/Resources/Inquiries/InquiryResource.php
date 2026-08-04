@@ -95,7 +95,10 @@ class InquiryResource extends Resource
                     ->color(fn (?string $state): string => match ($state) {
                         'pending' => 'danger', 'processing' => 'warning', 'done' => 'success', default => 'gray',
                     }),
-                TextColumn::make('created_at')->label('접수일')->dateTime('Y-m-d H:i'),
+                TextColumn::make('created_at')->label('접수일')->dateTime('Y-m-d H:i')->sortable(),
+                TextColumn::make('response_time')->label('응답 소요시간')
+                    ->getStateUsing(fn (Inquiry $record): ?string => self::formatResponseTime($record->responseMinutes()))
+                    ->placeholder('미답변'),
             ])
             ->filters([
                 SelectFilter::make('status')->label('상태')->options(['pending' => '대기', 'processing' => '처리중', 'done' => '완료']),
@@ -152,5 +155,24 @@ class InquiryResource extends Resource
             'index' => ListInquiries::route('/'),
             'edit' => EditInquiry::route('/{record}/edit'),
         ];
+    }
+
+    // '응답 소요시간' 컬럼용 축약 포맷터. 1일 이상이면 "N일" 또는 "N일 N시간"(DateInterval의 ->d를
+    // 쓰면 월 경계에서 잔여 일수만 남아 40일이 "9일"처럼 틀리게 나오므로, 반드시 분(int) 기반으로
+    // 직접 나눠 계산한다), 1시간 이상이면 "N시간", 그 미만이면 "N분"으로 표시한다.
+    private static function formatResponseTime(?int $minutes): ?string
+    {
+        if ($minutes === null) {
+            return null;
+        }
+
+        $days = intdiv($minutes, 1440);
+        $hours = intdiv($minutes % 1440, 60);
+
+        if ($days > 0) {
+            return $hours > 0 ? "{$days}일 {$hours}시간" : "{$days}일";
+        }
+
+        return $hours > 0 ? "{$hours}시간" : "{$minutes}분";
     }
 }

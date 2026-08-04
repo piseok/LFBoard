@@ -186,14 +186,27 @@ class BoardResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->withCount('posts'))
+            ->modifyQueryUsing(function ($query) {
+                $user = auth()->user();
+
+                // 글 수는 PostResource 목록/대시보드 위젯과 같은 규칙으로 세야 한다 — 임시저장 글은
+                // 작성한 본인만 볼 수 있어서(Post::scopeVisibleTo) 스코프 없는 withCount는 남의 임시저장
+                // 글까지 세고, 그 결과 게시판 목록·게시글관리·대시보드가 서로 다른 숫자를 보여준다.
+                // 별칭은 반드시 posts_count 그대로 유지 — duplicateBoard()의 replicate(['posts_count'])
+                // 제외가 이 이름에 의존한다(새 별칭을 추가하면 복제 시 "존재하지 않는 컬럼" 에러 재발).
+                return $query->withCount([
+                    'posts as posts_count' => fn ($q) => $user
+                        ? $q->visibleTo($user)
+                        : $q->where('is_draft', false),
+                ]);
+            })
             ->defaultSort('sort_order')
             ->columns([
                 TextColumn::make('name')->label('게시판명'),
                 TextColumn::make('slug')->label('URL 주소'),
                 TextColumn::make('locale')->label('언어')->badge(),
                 TextColumn::make('skin')->label('스킨')->badge(),
-                TextColumn::make('posts_count')->label('글 수'),
+                TextColumn::make('posts_count')->label('글 수')->sortable(),
                 IconColumn::make('is_active')->label('활성')->boolean(),
                 IconColumn::make('exclude_from_search')->label('검색제외')->boolean(),
                 TextColumn::make('sort_order')->label('순서'),
