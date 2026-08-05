@@ -10,6 +10,7 @@ use App\Services\SiteSettingService;
 use App\Services\UploadService;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Placeholder;
@@ -101,6 +102,7 @@ class SiteSettings extends Page
                     ->persistTabInQueryString()
                     ->tabs([
                         $this->generalTab(),
+                        $this->themeTab(),
                         $this->securityTab(),
                         $this->seoTab(),
                         $this->scriptTab(),
@@ -170,6 +172,35 @@ class SiteSettings extends Page
                     ->helperText('비워두면 푸터에 "Family Site" 메뉴 자체가 표시되지 않습니다.')
                     ->columnSpanFull(),
             ]);
+    }
+
+    // 조직도/타임라인/서브 히어로 등 프론트엔드 공용 컴포넌트(public/css/frontend.css의
+    // --color-brand-* 토큰, components.css)에 반영되는 브랜드 컬러 3키만 관리한다. "#rrggbb"
+    // 형식만 허용하는 정규식 검증은 layouts/app.blade.php가 이 값을 인라인 <style>로 그대로
+    // 출력하기 때문에 필수다 — htmlspecialchars만으로는 세미콜론/중괄호를 이용한 CSS
+    // 브레이크아웃(예: 다른 속성 주입)을 막지 못한다.
+    //
+    // 일부러 ->required()는 걸지 않는다 — 이 폼은 탭이 나뉘어 보여도 저장은 한 번에 전체
+    // getState()로 검증되므로(save() 참고), 아직 테마 색상이 한 번도 저장된 적 없는 설치(구버전
+    // SiteSettingSeeder로 만들어진 DB 등)에서 required였다면 이름/보안 등 이 탭과 무관한 설정을
+    // 바꿀 때도 저장이 막혀버린다. 비어 있으면 layouts/app.blade.php의 정규식 필터가 그냥
+    // 건너뛰고 frontend.css의 하드코딩된 기본값(#f58220 등)을 그대로 쓰므로 값이 없어도 안전하다.
+    private function themeTab(): Tab
+    {
+        $hexRule = 'regex:/^#[0-9a-f]{6}$/i';
+
+        return Tab::make('테마')
+            ->schema([
+                Text::make('조직도/타임라인 등 프론트엔드 공용 컴포넌트와 서브페이지 히어로 배너에 반영되는 브랜드 컬러입니다.')
+                    ->color('gray')->columnSpanFull(),
+                ColorPicker::make('theme_color_brand_primary')->label('브랜드 메인 컬러')
+                    ->rule($hexRule),
+                ColorPicker::make('theme_color_brand_primary_dark')->label('브랜드 메인 컬러(다크, 호버 등)')
+                    ->rule($hexRule),
+                ColorPicker::make('theme_color_brand_accent')->label('브랜드 강조 컬러')
+                    ->rule($hexRule),
+            ])
+            ->columns(3);
     }
 
     private function securityTab(): Tab
@@ -755,6 +786,8 @@ class SiteSettings extends Page
     private function keyGroupMap(): array
     {
         return [
+            'theme_color_brand_primary' => 'theme', 'theme_color_brand_primary_dark' => 'theme',
+            'theme_color_brand_accent' => 'theme',
             'session_secure_cookie_mode' => 'security', 'debug_mode_enabled' => 'security',
             'admin_ip_whitelist_enabled' => 'security', 'admin_ip_whitelist' => 'security',
             'site_ip_blocklist_enabled' => 'security', 'site_ip_blocklist' => 'security',

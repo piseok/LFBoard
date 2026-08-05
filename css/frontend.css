@@ -28,6 +28,47 @@
     --color-danger-ring: rgba(220, 38, 38, .35);
     --color-danger-dark: #b91c1c;
     --control-transition: .15s ease;
+
+    /* corporate/hospital 디자인 레퍼런스(.claude/design/corporate·hospital/README.md) 공통 DNA
+       토큰 — 그림자 없음, 절제된 radius, 트리형 조직도, 세로 타임라인 구조를 표현하는 데 필요한
+       색상/반경만 추가한다. 폼/버튼의 --color-primary 계열(위)은 별도 팔레트이므로 그대로 둔다
+       (통일은 별도 작업 범위). site_settings의 theme_color_brand_primary/-dark/-accent가 저장되면
+       layouts/app.blade.php의 인라인 <style>이 아래 --color-brand-* 3개를 요청마다 오버라이드한다. */
+    --color-brand-primary: #f58220;
+    --color-brand-primary-dark: #c96a15;
+    --color-brand-tint: #fef3e7;
+    --color-brand-accent: #2563eb;
+
+    /* 기존 헤더/푸터 전용 --color-main을 --color-brand-primary의 별칭으로 재정의 — 값이 기존과
+       동일(#f58220)해 non-breaking이며, 이제부터 브랜드 컬러의 단일 출처는 --color-brand-primary다. */
+    --color-main: var(--color-brand-primary);
+
+    --color-status-success: #16a34a;
+    --color-status-warning: #d97706;
+    --color-status-danger: #dc2626;
+    --color-status-info: #2563eb;
+
+    --color-text-primary: #1f2937;
+    --color-text-secondary: #6b7280;
+    --color-text-inverse: #ffffff;
+
+    --color-bg-subtle: #f9fafb;
+    --color-bg-inverse: #1f2937;
+
+    /* 조직도 2단계(부서) 박스 전용 — kaomc(#3D4754 다크그레이 사각 박스) 컨벤션을 기본 테마의
+       중립 다크 톤으로 반영. 브랜드 컬러와 별개로 항상 다크 뉴트럴을 유지한다(사이트마다 바뀌는
+       값이 아님 — 관리자 설정 대상 아님). */
+    --color-dark-surface: #22252b;
+
+    --color-border-strong: #d1d5db;
+
+    --color-overlay: rgba(0, 0, 0, .55);
+
+    --color-focus-ring: rgba(37, 99, 235, .35);
+
+    --radius-sm: 6px;
+    --radius-lg: 16px;
+    --radius-pill: 999px;
 }
 
 * { box-sizing: border-box; }

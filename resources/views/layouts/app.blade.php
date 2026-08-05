@@ -62,6 +62,9 @@
     <link rel="preload" href="{{ asset('fonts/vendor/pretendard/PretendardVariable.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ asset('css/vendor/pretendard/pretendard.css') }}">
     <link rel="stylesheet" href="{{ asset('css/frontend.css') }}">
+    {{-- 조직도/세로 타임라인/서브 히어로 등 corporate·hospital 공용 컴포넌트 스타일(어느 화면의
+         페이지 콘텐츠에도 등장할 수 있어 라우트 조건 없이 항상 로드) --}}
+    <link rel="stylesheet" href="{{ asset('css/components.css') }}">
     <link rel="stylesheet" href="{{ asset('css/vendor/swiper/swiper-bundle.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/slider.css') }}">
     @if (request()->routeIs('home', '*.home'))
@@ -73,6 +76,30 @@
              홈이 아닌 모든 화면에 함께 로드해 클래스 재사용에 따른 스타일 누락을 막는다. --}}
         <link rel="stylesheet" href="{{ asset('css/sub.css') }}">
         <link rel="stylesheet" href="{{ asset('css/board.css') }}">
+    @endif
+
+    {{-- 관리자가 "사이트 설정 > 테마" 탭에서 지정한 브랜드 컬러로 frontend.css의 --color-brand-*
+         기본값을 요청마다 오버라이드한다. 저장 시점에 Filament ColorPicker + 정규식 검증
+         (regex:/^#[0-9a-f]{6}$/i)으로 "#rrggbb" 형식만 허용하지만, 우회 경로(DB 직접 수정 등)에
+         대비해 여기서도 같은 형식만 통과시킨다 — CSS는 CSP script-src와 무관하게 style-src
+         'unsafe-inline'이 이미 허용되어 있어(SecurityHeaders 미들웨어) nonce 없이도 안전하게
+         인라인으로 출력할 수 있다. --}}
+    @php
+        $themeColorVars = [
+            '--color-brand-primary' => $siteSettings->get('theme_color_brand_primary'),
+            '--color-brand-primary-dark' => $siteSettings->get('theme_color_brand_primary_dark'),
+            '--color-brand-accent' => $siteSettings->get('theme_color_brand_accent'),
+        ];
+        $themeColorVars = array_filter($themeColorVars, fn ($v) => $v && preg_match('/^#[0-9a-f]{6}$/i', $v));
+    @endphp
+    @if ($themeColorVars)
+        <style>
+            :root {
+                @foreach ($themeColorVars as $cssVar => $value)
+                    {{ $cssVar }}: {{ $value }};
+                @endforeach
+            }
+        </style>
     @endif
 
     @stack('meta')

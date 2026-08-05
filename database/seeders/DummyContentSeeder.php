@@ -85,9 +85,32 @@ class DummyContentSeeder extends Seeder
     /** @return array<string, Page> */
     private function seedPages(): array
     {
+        // 'history'(연혁)는 원래 단순 <ul> 목록이었으나, corporate/hospital 디자인 레퍼런스 공통
+        // DNA(세로 타임라인)를 미리보기로 보여주기 위해 components/vertical-timeline.blade.php와
+        // 정확히 같은 구조("같은 클래스명")의 구운 HTML로 교체했다. 'organization'(조직도)은 이번에
+        // 신규 추가된 페이지로, components/org-chart-tree.blade.php와 짝을 이룬다. 두 컴포넌트
+        // 파일 상단의 "구운 HTML 드리프트" 경고 그대로: 컴포넌트 마크업을 바꾸면 이 문자열도 함께
+        // 손으로 맞춰야 한다(재시딩 자동화 없음, 사용자 결정). 형제 페이지들과 동일하게 locale은
+        // 의도적으로 'ko'만 시딩한다 — 다국어(D섹션) 파일럿과 무관한 데모 콘텐츠라 en/ja 버전은
+        // 처음부터 범위 밖이다(누락이 아니라 의도적 보류).
         $pages = [
             'about' => ['title' => '인사말', 'content' => '<h2>안녕하세요, 저희 사이트를 찾아주셔서 감사합니다.</h2><p>고객과의 신뢰를 최우선 가치로 삼고, 더 나은 서비스를 위해 항상 노력하겠습니다.</p><p>앞으로도 변함없는 관심과 성원 부탁드립니다.</p>'],
-            'history' => ['title' => '연혁', 'content' => '<ul><li>2024.01 — 법인 설립</li><li>2024.06 — 서비스 정식 오픈</li><li>2025.03 — 누적 이용자 10,000명 달성</li><li>2026.01 — 신규 서비스 확장</li></ul>'],
+            'history' => ['title' => '연혁', 'content' => '<ul class="vertical-timeline">'.
+                '<li class="vertical-timeline__item"><p class="vertical-timeline__year">2024</p><ul class="vertical-timeline__list"><li>01월 — 법인 설립</li><li>06월 — 서비스 정식 오픈</li></ul></li>'.
+                '<li class="vertical-timeline__item"><p class="vertical-timeline__year">2025</p><ul class="vertical-timeline__list"><li>03월 — 누적 이용자 10,000명 달성</li></ul></li>'.
+                '<li class="vertical-timeline__item"><p class="vertical-timeline__year">2026</p><ul class="vertical-timeline__list"><li>01월 — 신규 서비스 확장</li></ul></li>'.
+                '</ul>',
+            ],
+            'organization' => ['title' => '조직도', 'content' => '<div class="org-chart-tree">'.
+                '<div class="org-chart-tree__ceo">대표이사</div>'.
+                '<div class="org-chart-tree__connector" aria-hidden="true"></div>'.
+                '<div class="org-chart-tree__depts">'.
+                '<div class="org-chart-tree__dept-group"><div class="org-chart-tree__dept">경영지원본부</div><ul class="org-chart-tree__teams"><li class="org-chart-tree__team">총무팀</li><li class="org-chart-tree__team">인사팀</li><li class="org-chart-tree__team">재무팀</li></ul></div>'.
+                '<div class="org-chart-tree__dept-group"><div class="org-chart-tree__dept">사업본부</div><ul class="org-chart-tree__teams"><li class="org-chart-tree__team">영업팀</li><li class="org-chart-tree__team">마케팅팀</li></ul></div>'.
+                '<div class="org-chart-tree__dept-group"><div class="org-chart-tree__dept">기술본부</div><ul class="org-chart-tree__teams"><li class="org-chart-tree__team">개발팀</li><li class="org-chart-tree__team">인프라팀</li></ul></div>'.
+                '</div>'.
+                '</div>',
+            ],
             'location' => ['title' => '오시는길', 'content' => '<p>주소: 서울특별시 강남구 테헤란로 123, 4층</p><p>지하철: 2호선 강남역 3번 출구 도보 5분</p><p>주차: 건물 지하 1~3층 이용 가능(2시간 무료)</p>'],
             'support-info' => ['title' => '고객지원 안내', 'content' => '<p>궁금하신 사항은 아래 메뉴를 통해 확인하실 수 있습니다.</p><ul><li>공지사항 — 서비스 관련 주요 안내사항</li><li>자료실 — 각종 서식 및 이용 가이드</li><li>1:1 문의 — 개별 문의사항 접수</li></ul><p>운영시간: 평일 09:00~18:00 (주말·공휴일 휴무)</p>'],
             'archive-guide' => ['title' => '자료실 이용안내', 'content' => '<p>자료실에는 서비스 이용에 필요한 각종 서식과 매뉴얼이 등록되어 있습니다.</p><p>파일 다운로드는 로그인 후 이용 가능하며, 자료 요청은 1:1 문의를 통해 접수해 주세요.</p>'],
@@ -264,11 +287,14 @@ class DummyContentSeeder extends Seeder
         Menu::query()->delete();
 
         // 1뎁스: 회사소개 (그룹형 — 자체 페이지 없이 하위 메뉴만 보유)
+        // '조직도'는 이번(2026-08)에 추가된 메뉴 — 인사말/연혁 다음, 오시는길 앞에 배치해
+        // "회사 소개 → 조직 구성 → 오시는 길" 순서가 자연스럽게 읽히도록 했다.
         $top1 = Menu::create(['title' => '회사소개', 'type' => 'none', 'target' => '_self', 'is_active' => true, 'sort_order' => 1, 'min_level' => 0]);
         Menu::create(['parent_id' => $top1->id, 'title' => '인사말', 'type' => 'page', 'target_id' => $pages['about']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 1, 'min_level' => 0]);
         Menu::create(['parent_id' => $top1->id, 'title' => '연혁', 'type' => 'page', 'target_id' => $pages['history']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 2, 'min_level' => 0]);
-        Menu::create(['parent_id' => $top1->id, 'title' => '오시는길', 'type' => 'page', 'target_id' => $pages['location']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 3, 'min_level' => 0]);
-        Menu::create(['parent_id' => $top1->id, 'title' => '채용공고', 'type' => 'board', 'target_id' => $boards['recruitment']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 4, 'min_level' => 0]);
+        Menu::create(['parent_id' => $top1->id, 'title' => '조직도', 'type' => 'page', 'target_id' => $pages['organization']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 3, 'min_level' => 0]);
+        Menu::create(['parent_id' => $top1->id, 'title' => '오시는길', 'type' => 'page', 'target_id' => $pages['location']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 4, 'min_level' => 0]);
+        Menu::create(['parent_id' => $top1->id, 'title' => '채용공고', 'type' => 'board', 'target_id' => $boards['recruitment']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 5, 'min_level' => 0]);
 
         // 1뎁스: 고객지원 (자체 페이지이면서 동시에 하위 메뉴도 보유하는 혼합형)
         $top2 = Menu::create(['title' => '고객지원', 'type' => 'page', 'target_id' => $pages['support-info']->id, 'target' => '_self', 'is_active' => true, 'sort_order' => 2, 'min_level' => 0]);

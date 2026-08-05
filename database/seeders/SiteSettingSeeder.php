@@ -90,6 +90,15 @@ class SiteSettingSeeder extends Seeder
                 'social_naver_client_secret' => '',
             ],
 
+            // 테마(2026-08) — 브랜드 컬러 3키만 관리자가 조정 가능. 기본값은 public/css/frontend.css의
+            // --color-brand-primary/-dark/-accent 기본값과 동일해 non-breaking(설치 직후에도 시각적
+            // 변화 없음). layouts/app.blade.php의 인라인 <style>이 이 값으로 CSS 변수를 오버라이드한다.
+            'theme' => [
+                'theme_color_brand_primary' => '#f58220',
+                'theme_color_brand_primary_dark' => '#c96a15',
+                'theme_color_brand_accent' => '#2563eb',
+            ],
+
             // 차후 연동 여지 (SMS/카카오알림톡/본인인증)
             'integration' => [
                 'sms_provider' => '',

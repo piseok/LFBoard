@@ -1,0 +1,156 @@
+/* corporate/hospital 디자인 레퍼런스(.claude/design/corporate·hospital/README.md) 공통 DNA를 반영한
+   프론트엔드 공용 컴포넌트 스타일 — 조직도(트리형), 세로 타임라인, 서브페이지 히어로 배너.
+   색상/반경 토큰은 frontend.css의 :root에서 정의된 --color-brand-*/--radius-* 등을 그대로 참조한다.
+   이 카테고리의 공통 DNA대로 그림자(box-shadow)는 쓰지 않는다 — 구분은 얇은 보더/배경색 차이로만 한다. */
+
+/* ── 서브페이지 히어로 배너 ─────────────────────────────────────────── */
+.sub-hero {
+    background: var(--color-brand-primary);
+    color: var(--color-text-inverse);
+    border-radius: var(--radius-lg);
+    padding: 40px 32px;
+    margin-bottom: 24px;
+}
+.sub-hero__title { margin: 0; font-size: 1.9rem; font-weight: 700; }
+
+@media (max-width: 768px) {
+    .sub-hero { padding: 28px 20px; border-radius: var(--radius-sm); margin-bottom: 16px; }
+    .sub-hero__title { font-size: 1.4rem; }
+}
+
+/* ── 조직도(트리형) ── 최상위 pill(대표) → dark-surface 박스(부서) → outline 그리드(팀) ──────
+   resources/views/components/org-chart-tree.blade.php와 짝을 이룬다. */
+.org-chart-tree { display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+.org-chart-tree__ceo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 36px;
+    background: var(--color-brand-primary);
+    color: var(--color-text-inverse);
+    border-radius: var(--radius-pill);
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.org-chart-tree__connector {
+    width: 2px;
+    height: 28px;
+    background: var(--color-border-strong);
+}
+
+.org-chart-tree__depts {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28px;
+    width: 100%;
+    padding-top: 28px;
+}
+.org-chart-tree__depts::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12%;
+    right: 12%;
+    height: 2px;
+    background: var(--color-border-strong);
+}
+
+.org-chart-tree__dept-group {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding-top: 28px;
+    min-width: 180px;
+    flex: 1 1 200px;
+    max-width: 280px;
+}
+.org-chart-tree__dept-group::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 28px;
+    background: var(--color-border-strong);
+    transform: translateX(-50%);
+}
+
+.org-chart-tree__dept {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--color-dark-surface);
+    color: var(--color-text-inverse);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+}
+
+.org-chart-tree__teams {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 8px;
+    width: 100%;
+}
+.org-chart-tree__team {
+    padding: 8px 10px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+    .org-chart-tree__depts { flex-direction: column; align-items: center; gap: 24px; }
+    .org-chart-tree__depts::before { left: 50%; right: auto; width: 2px; height: 28px; top: 0; }
+    .org-chart-tree__dept-group { max-width: 100%; width: 100%; }
+}
+
+/* ── 세로 타임라인 ── 좌측정렬 단일선(연도 bold + 점 커넥터 + 하위 항목 리스트) ────────────────
+   resources/views/components/vertical-timeline.blade.php와 짝을 이룬다(kaomc/daejeon-beauty
+   레퍼런스의 "단일 세로선" 컨벤션 참고). */
+.vertical-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 2px solid var(--color-border-strong);
+}
+.vertical-timeline__item {
+    position: relative;
+    padding: 0 0 28px 28px;
+}
+.vertical-timeline__item:last-child { padding-bottom: 0; }
+.vertical-timeline__item::before {
+    content: '';
+    position: absolute;
+    left: -7px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-brand-primary);
+    border: 2px solid var(--color-bg);
+}
+.vertical-timeline__year {
+    margin: 0 0 8px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+.vertical-timeline__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.vertical-timeline__list li { color: var(--color-text-secondary); font-size: 0.92rem; }
