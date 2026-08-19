@@ -19,6 +19,28 @@
     display: block;
 }
 
+/* 배너 캡션(관리자 "이미지 위 텍스트" Repeater, Banner.captions) — <x-slider :items="...">로
+   렌더링되는 슬라이드는 image_path/link_url 등과 함께 captions가 있으면 hero-caption 마크업을
+   기본으로 그린다(resources/views/components/slider.blade.php). 이 파일은 frontend.css/main.css와
+   달리 모든 페이지에서 항상 로드되므로, 홈 히어로뿐 아니라 footer 배너·ja/home 등 <x-slider>가
+   쓰이는 어디서나 캡션이 최소한 이 스타일로는 보이는 걸 보장한다 — 슬라이드 높이가 홈 히어로처럼
+   크지 않은 경우(footer 등)를 기준으로 bottom을 슬라이드 하단에 가깝게 잡는다.
+   home/index.blade.php의 히어로는 하단 퀵링크바(.hero-bottom-bar)와 큰 타이포가 필요해서
+   .hero-slide 스코프로 main.css(홈 라우트에서만 로드)가 이 값을 오버라이드한다(같은 선택자
+   특정도 + 더 늦은 로드 순서라 오버라이드가 정상 적용됨). */
+.lf-slider .hero-caption {
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    bottom: 12px;
+    color: #fff;
+    z-index: 2;
+    pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+.lf-slider .hero-caption-line { margin: 0 0 4px; font-size: .95rem; line-height: 1.4; }
+.lf-slider .hero-caption-line:last-child { margin-bottom: 0; }
+
 /* 이전/다음 버튼 — 기본은 CSS만으로 그리는 화살표. prevIcon/nextIcon 슬롯을 넘기면
    data-custom-icon이 붙어 기본 화살표 대신 슬롯 내용이 보인다(사용처마다 커스텀 가능). */
 .lf-slider-nav {

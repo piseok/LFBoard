@@ -108,15 +108,12 @@ $frontRoutes = function () {
     Route::get('/mypage/password', [MyPageController::class, 'editPassword'])->middleware('auth')->name('mypage.password.edit');
     Route::put('/mypage/password', [MyPageController::class, 'updatePassword'])->middleware(['auth', 'throttle:5,1'])->name('mypage.password.update');
 
-    Route::get('/banner/click/{id}', [BannerController::class, 'click'])->name('banner.click');
-
     Route::get('/terms', [PolicyController::class, 'show'])->defaults('type', 'terms')->name('policy.terms');
     Route::get('/privacy', [PolicyController::class, 'show'])->defaults('type', 'privacy')->name('policy.privacy');
     Route::get('/marketing-policy', [PolicyController::class, 'show'])->defaults('type', 'marketing')->name('policy.marketing');
     Route::get('/email-collection-notice', [PolicyController::class, 'show'])->defaults('type', 'email_notice')->name('policy.email-notice');
     Route::get('/policy/{type}/change-notice', [PolicyController::class, 'changeNotice'])->name('policy.change-notice');
 
-    Route::get('/media/download/{id}', [MediaController::class, 'download'])->name('media.download');
     Route::get('/unsubscribe/{token}', [MarketingController::class, 'unsubscribe'])->name('marketing.unsubscribe');
 
     Route::get('/search', [SearchController::class, 'index'])->name('search.index');
@@ -130,10 +127,25 @@ $frontRoutes = function () {
     });
 };
 
-Route::middleware(['record.visit', 'locale', 'policy.consent', 'password.reminder'])->group($frontRoutes);
+// 'site.login' 예외 라우트 — 배너 클릭 이동/파일 다운로드는 이메일·카톡 등 사이트 밖 채널로
+// 공유되는 링크라 "전체 사이트 로그인 필수(인트라넷 모드)"가 켜져 있어도 비회원이 열 수 있어야
+// 한다(2026-08-08 사용자 확인: 인트라넷 모드에서도 예외로 열어둘 것). 그 외 동작은 $frontRoutes와
+// 동일하게 방문 기록/언어 감지 대상.
+$siteLoginExemptRoutes = function () {
+    Route::get('/banner/click/{id}', [BannerController::class, 'click'])->name('banner.click');
+    Route::get('/media/download/{id}', [MediaController::class, 'download'])->name('media.download');
+};
+
+// 'site.login'은 사이트 설정(보안 탭) "전체 사이트 로그인 필수"가 켜졌을 때만 비회원을
+// 로그인 화면으로 돌려보낸다(기본값 꺼짐 — 기존 게시판별 레벨 체계만으로 동작, 동작 변화 없음).
+// 'locale' 다음(로그인 리다이렉트 URL을 올바른 언어로 생성하기 위해) · 'policy.consent'/
+// 'password.reminder' 이전(두 미들웨어는 로그인된 사용자만 대상이라 순서 무관)에 둔다.
+Route::middleware(['record.visit', 'locale', 'site.login', 'policy.consent', 'password.reminder'])->group($frontRoutes);
+Route::middleware(['record.visit', 'locale'])->group($siteLoginExemptRoutes);
 
 foreach ($additionalLocales as $localeCode) {
-    Route::prefix($localeCode)->name("{$localeCode}.")->middleware(['record.visit', 'locale', 'policy.consent', 'password.reminder'])->group($frontRoutes);
+    Route::prefix($localeCode)->name("{$localeCode}.")->middleware(['record.visit', 'locale', 'site.login', 'policy.consent', 'password.reminder'])->group($frontRoutes);
+    Route::prefix($localeCode)->name("{$localeCode}.")->middleware(['record.visit', 'locale'])->group($siteLoginExemptRoutes);
 }
 
 // SEO 라우트는 방문 기록 대상에서 제외. sitemap.xml은 언어별 URL을 섞지 않기 위해

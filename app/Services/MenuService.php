@@ -49,10 +49,20 @@ class MenuService
         return $menus
             ->where('parent_id', $parentId)
             ->map(function (Menu $menu) use ($menus, $depth, $userLevel) {
+                $children = $this->buildTree($menus, $menu->id, $depth + 1, $userLevel);
+                $url = $this->resolveUrl($menu);
+
+                // 링크가 없는(url === '#') 메뉴에 하위 메뉴가 있으면, 클릭했을 때 아무 데도 안 가는
+                // 대신 그 하위의 첫 번째 항목으로 이동하게 한다(2026-08-11, 사용자 지시). 하위가 없으면
+                // 기존대로 '#'를 그대로 둔다.
+                if ($url === '#' && ! empty($children)) {
+                    $url = $children[0]['url'];
+                }
+
                 return [
                     'id' => $menu->id,
                     'title' => $menu->title,
-                    'url' => $this->resolveUrl($menu),
+                    'url' => $url,
                     'target' => $menu->target,
                     'type' => $menu->type,
                     'locked' => $menu->access_mode === 'locked' && $menu->min_level > $userLevel,
@@ -60,7 +70,7 @@ class MenuService
                     // getActiveBranch()가 계산하는 로컬 내비게이션(LNB)에는 영향이 없다. 예: "마이페이지"를
                     // 헤더에서는 숨기고(헤더에 이미 별도 진입 링크가 있음) 그 하위 페이지에서만 LNB로 노출.
                     'hidden_from_header' => $menu->hidden_from_header,
-                    'children' => $this->buildTree($menus, $menu->id, $depth + 1, $userLevel),
+                    'children' => $children,
                 ];
             })
             ->values()

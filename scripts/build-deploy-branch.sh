@@ -67,14 +67,10 @@ cat > .gitignore <<'GITIGNORE_EOF'
 /storage/framework/views/*
 !storage/**/.gitignore
 !storage/**/.gitkeep
-/uploads/**/*
-!/uploads/**/.gitkeep
-!/uploads/.htaccess
+/public/uploads/**/*
+!/public/uploads/**/.gitkeep
+!/public/uploads/.htaccess
 /*-deploy.zip
-# 윈도우 예약 장치명(nul) 등 실수로 생성된 로컬 아티팩트 — git add -A 시 인덱싱 자체가
-# 실패하는 사고를 방지하기 위해 명시적으로 무시한다.
-/nul
-/cms_admin
 GITIGNORE_EOF
 git add .gitignore
 if git diff --cached --quiet -- .github .gitignore; then

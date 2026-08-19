@@ -13,6 +13,7 @@ use App\Http\Middleware\ApplyScheduledPolicyChanges;
 use App\Http\Middleware\ProcessDormantAccounts;
 use App\Http\Middleware\PruneAdminAuditLogs;
 use App\Http\Middleware\PruneAiChatHistory;
+use App\Http\Middleware\PruneInquiries;
 use App\Http\Middleware\RecordAdminAccess;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SyncVendorNotices;
@@ -110,6 +111,7 @@ class AdminPanelProvider extends PanelProvider
                 ApplyScheduledPolicyChanges::class,
                 PruneAdminAuditLogs::class,
                 PruneAiChatHistory::class,
+                PruneInquiries::class,
                 SyncVendorNotices::class,
             ])
             // 관리자 패널 전역에 항상 떠 있는 AI 비서 위젯(퀵메뉴). 로그인 전(예: 로그인 화면)에는

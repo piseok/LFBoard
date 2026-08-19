@@ -226,6 +226,14 @@ class SiteSettings extends Page
                         '호스팅사에서 서버 로그를 직접 확인하기 어려울 때 켜서 원인을 파악한 뒤 다시 꺼두세요. '.
                         '"시스템 설정 > 에러 로그"에서도 최근 오류 내역을 확인할 수 있습니다.'
                     ),
+                $this->boolToggle('site_login_required_enabled', '전체 사이트 로그인 필수(인트라넷 모드)')
+                    ->helperText(
+                        'ON 시 비회원은 로그인/회원가입/비밀번호 재설정 화면을 제외한 사이트 전체(홈, 게시판, 1:1 상담, '.
+                        '검색 등)에 접근할 수 없고 로그인 화면으로 이동합니다. 각 게시판의 "읽기/쓰기/댓글 최소 등급" '.
+                        '설정과는 별개로 그보다 앞단에서 먼저 적용되는 조건입니다 — 이 설정을 꺼두면(기본값) 지금처럼 '.
+                        '게시판별 등급 설정만으로 접근이 제어되며 동작 변화가 없습니다. 로그인 후에는 등급과 무관하게 '.
+                        '통과하며, 이후 게시판별 최소 등급 제한은 그대로 적용됩니다.'
+                    ),
                 $this->boolToggle('admin_ip_whitelist_enabled', '관리자 접속 IP 제한 사용')
                     ->helperText(
                         'ON 시 아래 목록에 등록된 IP/대역에서만 관리자 패널 접속이 가능합니다(로그인 화면 자체는 막지 않고, 로그인 이후 페이지 접근을 제한합니다). '.
@@ -789,6 +797,7 @@ class SiteSettings extends Page
             'theme_color_brand_primary' => 'theme', 'theme_color_brand_primary_dark' => 'theme',
             'theme_color_brand_accent' => 'theme',
             'session_secure_cookie_mode' => 'security', 'debug_mode_enabled' => 'security',
+            'site_login_required_enabled' => 'security',
             'admin_ip_whitelist_enabled' => 'security', 'admin_ip_whitelist' => 'security',
             'site_ip_blocklist_enabled' => 'security', 'site_ip_blocklist' => 'security',
             'password_change_reminder_months' => 'security', 'password_change_reminder_enabled' => 'security',

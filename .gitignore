@@ -10,7 +10,7 @@
 /storage/framework/views/*
 !storage/**/.gitignore
 !storage/**/.gitkeep
-/public/uploads/**/*
-!/public/uploads/**/.gitkeep
-!/public/uploads/.htaccess
+/uploads/**/*
+!/uploads/**/.gitkeep
+!/uploads/.htaccess
 /*-deploy.zip

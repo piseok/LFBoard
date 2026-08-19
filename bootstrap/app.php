@@ -8,6 +8,7 @@ use App\Http\Middleware\EnsurePasswordChangeReminder;
 use App\Http\Middleware\EnsureRequiredPolicyConsent;
 use App\Http\Middleware\RecordVisit;
 use App\Http\Middleware\RequireInstallation;
+use App\Http\Middleware\RequireSiteLogin;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SiteIpBlocklist;
 use Illuminate\Foundation\Application;
@@ -30,6 +31,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
             'locale' => DetectLocale::class,
             'policy.consent' => EnsureRequiredPolicyConsent::class,
             'password.reminder' => EnsurePasswordChangeReminder::class,
+            'site.login' => RequireSiteLogin::class,
         ]);
 
         $middleware->web(prepend: [

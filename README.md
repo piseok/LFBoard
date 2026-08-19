@@ -15,7 +15,7 @@ Laravel 12 + Filament 4 기반 CMS(콘텐츠 관리 시스템). 크론(스케줄
 | 백엔드 | Laravel 12, PHP 8.3+ |
 | 관리자 패널 | Filament 4 (`/admin`, 경로는 `ADMIN_PATH` 환경변수로 변경 가능) |
 | DB | MySQL 5.7+ 또는 MariaDB 10.2+ (설치 마법사가 접속 시 자동 감지해 `DB_CONNECTION`을 알맞게 설정 — 3번 항목 참고) |
-| 프론트엔드 | Blade 템플릿 + 순수 JS(빌드 도구 없이 `js/`, `css/` 직접 서빙) |
+| 프론트엔드 | Blade 템플릿 + 순수 JS(빌드 도구 없이 `public/js`, `public/css` 직접 서빙) |
 | 로컬 개발 환경 | Docker(Laravel Sail 기반, `docker-compose.yml`) — 로컬 PHP 버전이 8.3 미만이면 반드시 이 방식 사용 |
 
 ---
@@ -51,27 +51,17 @@ database/
 ├── seeders/                초기 데이터(관리자 계정, 이메일 템플릿, 금칙어, 메뉴 등)
 └── geoip/                 로그인 국가감지용 정적 IP 대역 데이터(8-3 항목 필독)
 
-index.php                    라라벨 진입점 — 저장소 루트 자체가 서버의 문서 루트(DocumentRoot)
-install.php                  최초 설치 마법사(3번 항목 참고, 설치 완료 후에는 접근이 자동으로 막힘)
-uploads/                     회원/관리자가 업로드한 파일이 저장되는 실제 위치(4번 항목 필독)
-css/, js/, fonts/            프론트엔드 정적 자산(빌드 도구 없이 직접 서빙)
-.htaccess                    URL 재작성 규칙
+public/
+├── index.php               라라벨 진입점 — 서버의 문서 루트(DocumentRoot)는 반드시 이 public/ 폴더를 가리켜야 함
+├── install.php              최초 설치 마법사(3번 항목 참고, 설치 완료 후에는 접근이 자동으로 막힘)
+└── uploads/                 회원/관리자가 업로드한 파일이 저장되는 실제 위치(4번 항목 필독)
 ```
-
-> ⚠️ 표준 Laravel 배포는 `public/` 하위에 이 파일들이 있고 DocumentRoot가 `public/`을
-> 가리켜야 하지만, 이 저장소는 **`public/` 폴더 없이 위 파일들이 저장소 루트에 바로
-> 있는 평탄화(flatten)된 구조**입니다 — 크론/SSH를 못 쓰는 공유호스팅은 보통 DocumentRoot
-> 자체를 바꿀 수 없어 웹 루트 상위에 저장소를 그대로 올려야 하기 때문입니다. 그래서
-> **DocumentRoot는 저장소 루트를 그대로 가리키면 됩니다**(별도 설정 불필요). 코드에서는
-> `bootstrap/app.php`가 `public/` 디렉터리가 실제로 없으면 `usePublicPath()`로 라라벨의
-> "퍼블릭 경로" 개념 자체를 저장소 루트로 바꿔치기해서, `public_path()`를 쓰는 모든 코드가
-> 별도 수정 없이 그대로 동작합니다.
 
 ---
 
 ## 3. 설치 방법
 
-1. 이 저장소를 그대로 서버(공유호스팅 등)의 웹 루트에 업로드합니다 — 위에서 설명한 평탄화 구조라 **DocumentRoot를 저장소 루트로 두면 됩니다**(별도로 `public/` 폴더를 가리키게 설정할 필요 없음). `.env` 파일은 미리 만들 필요가 없습니다 — 설치 마법사가 전부 생성합니다.
+1. 이 zip 압축을 해제해 서버(공유호스팅 등)의 웹 루트 상위에 업로드하고, **웹서버 DocumentRoot는 반드시 `public/` 폴더**를 가리키도록 설정합니다. `.env` 파일은 미리 만들 필요가 없습니다 — 설치 마법사가 전부 생성합니다.
 2. 브라우저로 `https://내도메인/install.php`에 접속하면 5단계 설치 마법사가 실행됩니다: 환경 체크 → DB 연결 설정 → 사이트 기본 설정 → 설치 실행(마이그레이션+시더 자동 실행) → 완료.
    > ⚠️ DB 연결 설정 단계에서 호스트/포트/DB명/계정 정보만 입력하면 됩니다. `.env` 파일과 `APP_KEY`는 이 단계에서 자동 생성되므로 직접 만들거나 수정할 필요가 없습니다. 서버가 MySQL인지 MariaDB인지, 몇 버전인지도 연결 테스트 시 자동으로 감지해 `DB_CONNECTION` 값에 알맞게 반영합니다(지원 최소 사양: MySQL 5.7 / MariaDB 10.2 이상 — JSON 컬럼을 쓰기 때문입니다. 미만이면 설치가 막히고 안내 메시지가 뜹니다).
 3. 설치가 완료되면 `install.php`는 자동으로 재접근이 차단됩니다(`RequireInstallation` 미들웨어가 `.env`의 설치 완료 플래그를 확인). 필요 없어지면 파일 자체를 지워도 됩니다.
@@ -81,9 +71,9 @@ css/, js/, fonts/            프론트엔드 정적 자산(빌드 도구 없이 
 
 ## 4. 업로드 파일은 `storage:link` 없이 동작합니다
 
-`config/filesystems.php`의 `uploads` 디스크가 `storage/app`이 아니라 **`public_path('uploads')`를 직접 루트로 사용**하도록 되어 있습니다(이 저장소에서는 `public_path()`가 저장소 루트를 가리키므로 실제로는 저장소 루트의 `uploads/` 폴더). 그래서:
+`config/filesystems.php`의 `uploads` 디스크가 `storage/app`이 아니라 **`public/uploads`를 직접 루트로 사용**하도록 되어 있습니다. 그래서:
 - `php artisan storage:link` 실행이 **필요 없습니다**(공유호스팅은 심볼릭 링크 생성이 막혀 있는 경우가 많아 이렇게 설계됨).
-- 배포 시 저장소 루트의 `uploads/` 폴더에 쓰기 권한(755 또는 775)만 있으면 됩니다.
+- 배포 시 `public/uploads/` 폴더에 쓰기 권한(755 또는 775)만 있으면 됩니다.
 
 ---
 
@@ -280,6 +270,104 @@ Filament은 `app/Filament/Resources/`, `app/Filament/Pages/` 아래에 파일만
    동일한 기준). 이걸 빼먹으면 화면(Resource)은 권한대로 잘 막혀 있는데 대시보드에는 다른
    팀 게시판 글 제목이나 담당 아닌 상담 내용이 그대로 보이는 정보노출이 생깁니다
    (2026-07-05에 실제로 이 문제가 있었음).
+
+#### 12-1-b. 복잡한 Resource — 폴더 안에 폴더(RelationManagers)
+
+지금까지는 `{기능명}Resource.php` + `Pages/{List,Create,Edit}{기능명}.php` 정도로 끝나는
+단순한 경우만 다뤘습니다. 그런데 "게시판 하나에 카테고리 여러 개"처럼 **한 화면 안에서
+연결된 하위 모델까지 함께 관리**해야 하는 경우가 있습니다 — 이럴 땐 Resource 폴더 밑에
+`RelationManagers/` 폴더를 하나 더 만듭니다.
+
+```
+app/Filament/Resources/Boards/
+├── BoardResource.php
+├── Pages/
+│   ├── ListBoards.php
+│   ├── CreateBoard.php
+│   └── EditBoard.php
+└── RelationManagers/
+    └── CategoriesRelationManager.php   ← 게시판 수정 화면 안에 "카테고리" 탭으로 나타남
+```
+
+```php
+// app/Filament/Resources/Boards/RelationManagers/CategoriesRelationManager.php
+class CategoriesRelationManager extends RelationManager
+{
+    protected static string $relationship = 'categories'; // Board 모델의 relation 메서드명
+
+    public function form(Schema $schema): Schema { /* 카테고리 자체의 입력 폼 */ }
+    public function table(Table $table): Table { /* 카테고리 목록/추가/삭제 */ }
+}
+```
+
+> ⚠️ **`RelationManagers/`는 자동 인식되지 않습니다.** 이 문서 맨 위에서 말한 "파일만 만들면
+> 자동 인식"은 `Resources/`, `Pages/` 최상위에만 해당하고, RelationManager는 부모
+> Resource에서 직접 등록해줘야 화면에 나타납니다.
+> ```php
+> // BoardResource.php
+> public static function getRelations(): array
+> {
+>     return [
+>         CategoriesRelationManager::class,
+>     ];
+> }
+> ```
+> 모델 쪽에도 당연히 `categories(): HasMany` 같은 관계 메서드가 있어야 합니다. 이 패턴은
+> 중첩도 가능합니다 — 예를 들어 "강의 안에 챕터, 챕터 안에 영상" 같은 3단계 구조도 챕터
+> RelationManager 안에서 다시 자식 Repeater/관계를 다루는 식으로 얼마든지 확장할 수
+> 있습니다(다만 Filament의 RelationManager 자체는 한 단계만 지원하므로, 그 다음 단계부터는
+> Repeater나 별도 화면으로 처리하는 게 일반적입니다).
+
+#### 12-1-c. `form()`/`table()`만으로 안 되는 화면 — `resources/views/filament/`까지 직접 만들기
+
+지금까지의 `Page`는 `form()`이나 `table()`만 정의하면 Filament가 화면을 알아서 그려줬습니다.
+하지만 "SQL 직접 실행 도구"처럼 **폼 + 실행 결과 + 에러 메시지를 한 화면에 같이 보여줘야
+하는 경우**처럼, Filament의 기본 레이아웃만으로는 부족한 화면은 `resources/views/filament/`
+밑에 **직접 Blade 뷰를 만들어서** `$view` 프로퍼티로 연결합니다.
+
+```
+app/Filament/Pages/DatabaseQueryTool.php   ← $view = 'filament.pages.database-query-tool';
+resources/views/filament/pages/database-query-tool.blade.php
+```
+
+```php
+// app/Filament/Pages/DatabaseQueryTool.php
+class DatabaseQueryTool extends Page
+{
+    protected string $view = 'filament.pages.database-query-tool';
+
+    public ?string $resultHtml = null;   // ← Livewire 공개 프로퍼티. 뷰에서 바로 씀
+    public ?string $errorMessage = null;
+
+    public function form(Schema $schema): Schema { /* SQL 입력창 등 */ }
+
+    public function run(): void { /* SQL 실행 후 $resultHtml/$errorMessage 채움 */ }
+}
+```
+
+```blade
+{{-- resources/views/filament/pages/database-query-tool.blade.php --}}
+<x-filament-panels::page>
+    <form wire:submit="run">
+        {{ $this->form }}
+        <x-filament::button type="submit" wire:confirm="실행하시겠습니까?">실행</x-filament::button>
+    </form>
+
+    @if ($errorMessage)
+        <pre>{{ $errorMessage }}</pre>
+    @endif
+    @if ($resultHtml)
+        <div>{!! $resultHtml !!}</div>
+    @endif
+</x-filament-panels::page>
+```
+
+`<x-filament-panels::page>`로 감싸기만 하면 Filament 레이아웃(사이드바/헤더 등)은 그대로
+유지되고, 안쪽은 완전히 자유롭게 구성할 수 있습니다. `$this->form`은 위 폼 정의를 그 자리에
+그대로 렌더링하라는 뜻이고, `resultHtml`/`errorMessage`처럼 Page 클래스의 **public
+프로퍼티는 뷰에서 바로 `{{ }}`로 접근**할 수 있습니다(일반 Livewire 컴포넌트와 동일).
+이 패턴을 쓰는 다른 예: `MediaLibrary`(미디어 라이브러리 그리드), `SystemUpdate`(배포 후
+버튼 클릭으로 마이그레이션 실행), `ErrorLogViewer`(에러 로그 목록).
 
 ### 12-2. 실제 사례로 보는 패턴 — 게시판에 필드 추가하기 (모집용 게시판)
 
@@ -495,10 +583,10 @@ Route::post('/reservation', [ReservationController::class, 'store'])->name('rese
 ## 13. 재사용 가능한 슬라이드 컴포넌트 (`<x-slider>`)
 
 배너/게시판 등 어디서든 쓸 수 있는 반응형 캐러셀입니다. [Swiper](https://swiperjs.com) 14를
-`js/vendor/swiper`, `css/vendor/swiper`에 벤더링해 빌드 도구 없이 그대로
+`public/js/vendor/swiper`, `public/css/vendor/swiper`에 벤더링해 빌드 도구 없이 그대로
 서빙하고(빌드 파이프라인이 없는 이 프론트엔드 관례를 그대로 따름), 그 위에 이 프로젝트
-전용 래퍼/스타일(`resources/views/components/slider.blade.php`, `js/slider-init.js`,
-`css/slider.css`)을 얹은 구조입니다. Swiper 본체와 이 프로젝트의 스타일은 서로 다른
+전용 래퍼/스타일(`resources/views/components/slider.blade.php`, `public/js/slider-init.js`,
+`public/css/slider.css`)을 얹은 구조입니다. Swiper 본체와 이 프로젝트의 스타일은 서로 다른
 파일로 분리되어 있어 Swiper를 다른 버전으로 교체해도 우리 쪽 CSS/JS는 건드릴 필요가
 없습니다.
 

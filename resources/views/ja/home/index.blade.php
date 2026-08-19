@@ -14,7 +14,7 @@
     @if ($banners->isNotEmpty())
         <section style="margin-bottom: 32px;">
             {{-- link_url이 없는 배너는 클릭 경유(banner.click) 링크도 만들지 않는다(홈 이동 폴백 방지). --}}
-            <x-slider :items="$banners->map(fn ($banner) => ['content_type' => $banner->content_type, 'html_content' => $banner->html_content, 'image_path' => $banner->image_path, 'link_url' => $banner->link_url ? front_route('banner.click', $banner) : null, 'link_target' => $banner->link_target, 'alt_text' => $banner->alt_text ?: $banner->title])" aria-label="メインバナー" />
+            <x-slider :items="$banners->map(fn ($banner) => ['content_type' => $banner->content_type, 'html_content' => $banner->html_content, 'image_path' => $banner->image_path, 'link_url' => $banner->link_url ? front_route('banner.click', $banner) : null, 'link_target' => $banner->link_target, 'alt_text' => $banner->alt_text ?: $banner->title, 'captions' => $banner->captions])" aria-label="メインバナー" />
         </section>
     @endif
 @endsection

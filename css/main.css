@@ -12,12 +12,15 @@
     z-index: 1;
 }
 .hero-slide-link { position: absolute; inset: 0; z-index: 1; }
-.hero-caption { position: absolute; left: 6%; bottom: 90px; color: #fff; z-index: 2; pointer-events: none; }
-/* 줄마다 다른 스타일을 주려면 .hero-caption-line-1/2/3... 을 개별로 재정의하면 됨(아래는 기본값). */
-.hero-caption-line { margin: 0 0 8px; font-size: 1.1rem; line-height: 1.4; }
-.hero-caption-line:last-child { margin-bottom: 0; }
-.hero-caption-line-1 { font-size: .9rem; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
-.hero-caption-line-2 { font-size: 2rem; font-weight: 800; }
+/* 캡션(.hero-caption) 자체의 위치/타이포는 <x-slider>가 어디서든 기본 제공하는 값으로
+   public/css/slider.css(전역 로드)에 정의되어 있다(.lf-slider .hero-caption). 여기서는 홈
+   히어로에서만 필요한 오버라이드만 얹는다 — 하단 퀵링크바(.hero-bottom-bar)와 겹치지 않게
+   bottom을 더 띄우고, 배경 이미지 위 큰 타이포(1번째 줄 eyebrow + 2번째 줄 큰 헤드라인)를 적용.
+   .hero-slide로 스코프해서 슬라이더가 쓰이는 다른 곳(footer, ja/home 등)에는 영향이 없다. */
+.hero-slide .hero-caption { bottom: 90px; }
+.hero-slide .hero-caption-line { margin: 0 0 8px; font-size: 1.1rem; }
+.hero-slide .hero-caption-line-1 { font-size: .9rem; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+.hero-slide .hero-caption-line-2 { font-size: 2rem; font-weight: 800; }
 
 .hero-bottom-bar {
     position: relative;
@@ -59,8 +62,8 @@
 
 @media (max-width: 992px) {
     .hero-slide { height: 320px; }
-    .hero-caption { left: 5%; bottom: 76px; }
-    .hero-caption-line-2 { font-size: 1.4rem; }
+    .hero-slide .hero-caption { left: 5%; bottom: 76px; }
+    .hero-slide .hero-caption-line-2 { font-size: 1.4rem; }
     .hero-bottom-bar { padding: 12px 20px; }
     .hero-quick-links li { padding: 0 12px; font-size: .85rem; }
 }

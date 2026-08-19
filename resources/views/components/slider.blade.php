@@ -133,6 +133,11 @@
                     $url = $itemValue($item, 'link_url');
                     $target = $itemValue($item, 'link_target') ?: '_self';
                     $alt = $itemValue($item, 'alt_text') ?: $itemValue($item, 'title');
+                    // 배너 관리의 "이미지 위 텍스트"(Repeater, [['text' => ...], ...]) — image 타입에서만
+                    // 의미가 있다(BannerResource 폼도 content_type === 'image'일 때만 노출). home/index.blade.php의
+                    // 히어로 렌더링과 동일한 hero-caption/hero-caption-line-N 마크업을 여기서도 기본으로
+                    // 그려서, :items 숏핸드로 슬라이더를 쓰는 모든 곳(footer, ja/home 등)에서 캡션이 빠지지 않게 한다.
+                    $captions = ! $isHtml ? ($itemValue($item, 'captions') ?: []) : [];
                 @endphp
                 <div class="swiper-slide">
                     @if ($isHtml)
@@ -143,6 +148,15 @@
                         </a>
                     @else
                         <img src="{{ url($image) }}" alt="{{ $alt }}">
+                    @endif
+                    @if (! empty($captions))
+                        {{-- 신뢰된 관리자 입력이라 이스케이프하지 않고 그대로 출력(줄바꿈은 nl2br) —
+                             home/index.blade.php 히어로 캡션과 동일한 규칙. --}}
+                        <div class="hero-caption">
+                            @foreach ($captions as $index => $line)
+                                <p class="hero-caption-line hero-caption-line-{{ $index + 1 }}">{!! nl2br(is_array($line) ? ($line['text'] ?? '') : $line) !!}</p>
+                            @endforeach
+                        </div>
                     @endif
                 </div>
             @endforeach
