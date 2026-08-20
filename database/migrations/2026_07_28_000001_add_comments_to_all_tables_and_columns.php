@@ -629,7 +629,7 @@ return new class extends Migration
             }
 
             $value = $forward ? $comment : '';
-            DB::statement("ALTER TABLE `{$table}` COMMENT = ".DB::getPdo()->quote($value));
+            DB::statement('ALTER TABLE `'.$this->prefixedTable($table).'` COMMENT = '.DB::getPdo()->quote($value));
         }
 
         foreach (self::COLUMN_COMMENTS as $table => $columns) {
@@ -637,6 +637,17 @@ return new class extends Migration
                 $this->commentColumn($table, $column, $forward ? $comment : '');
             }
         }
+    }
+
+    // Schema::hasTable()/hasColumn()는 커넥션에 설정된 테이블 접두사(config('database.connections.
+    // mysql.prefix'), DB_PREFIX)를 자동으로 반영하지만, 아래의 raw DB::statement()/DB::selectOne()은
+    // 접두사를 모르는 순수 SQL 문자열이라 직접 접두사를 붙여줘야 한다 — 안 붙이면 접두사가 설정된
+    // 환경에서 hasTable()은 "있음"으로 통과시켜 놓고 바로 다음 줄의 raw ALTER TABLE은 접두사 없는
+    // 이름을 찾다가 1146(테이블 없음)으로 죽는다(접두사 없는 환경에서는 두 경로가 우연히 같은 이름을
+    // 봐서 드러나지 않았던 실제 버그, 2026-08-20 접두사 설정된 설치에서 재현·확인).
+    private function prefixedTable(string $table): string
+    {
+        return DB::getTablePrefix().$table;
     }
 
     // MySQL은 COMMENT만 바꾸는 별도 문법이 없고 MODIFY COLUMN으로 컬럼 정의 전체를 다시
@@ -649,17 +660,19 @@ return new class extends Migration
             return;
         }
 
+        $prefixedTable = $this->prefixedTable($table);
+
         $row = DB::selectOne(
             'SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA FROM information_schema.columns
              WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
-            [$table, $column]
+            [$prefixedTable, $column]
         );
 
         if (! $row) {
             return;
         }
 
-        $sql = "ALTER TABLE `{$table}` MODIFY COLUMN `{$column}` {$row->COLUMN_TYPE} ";
+        $sql = "ALTER TABLE `{$prefixedTable}` MODIFY COLUMN `{$column}` {$row->COLUMN_TYPE} ";
         $sql .= $row->IS_NULLABLE === 'NO' ? 'NOT NULL' : 'NULL';
 
         if (str_contains($row->EXTRA, 'auto_increment')) {
