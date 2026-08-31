@@ -42,6 +42,22 @@ class UploadServiceTest extends TestCase
         Storage::disk('uploads')->assertExists($path);
     }
 
+    // 리치에디터 파일첨부(HasRichEditorDefaults)가 쓰는 type='editor'는 resolveCategory()의
+    // 'pages'/'policies'/'images' 전용 분기에 안 걸려 확장자로 이미지/문서를 자동 판별하는
+    // 기본 분기를 탄다 — 이미지와 문서 둘 다 같은 type으로 정상 처리되는지 확인한다.
+    public function test_editor_type_accepts_both_images_and_documents(): void
+    {
+        Storage::fake('uploads');
+
+        $imagePath = app(UploadService::class)->upload(UploadedFile::fake()->image('diagram.png', 50, 50), 'editor');
+        $docPath = app(UploadService::class)->upload(UploadedFile::fake()->create('spec.pdf', 100), 'editor');
+
+        $this->assertStringStartsWith('uploads/editor/', $imagePath);
+        $this->assertStringStartsWith('uploads/editor/', $docPath);
+        Storage::disk('uploads')->assertExists($imagePath);
+        Storage::disk('uploads')->assertExists($docPath);
+    }
+
     public function test_php_disguised_as_image_extension_is_rejected(): void
     {
         Storage::fake('uploads');
