@@ -99,12 +99,23 @@ class PageResource extends Resource
                         })
                         ->visible(fn (callable $get) => $get('content_type') === 'html_file'),
 
-                    FileUpload::make('html_file_path')->label('HTML 파일')->disk('uploads')
+                    // html_file_upload는 FileUpload 전용 UI 필드(Page의 실제 컬럼이 아님) — 아래
+                    // TextInput과 statePath를 공유하면 Filament가 FileUpload의 내부 상태를 문자열로
+                    // 강제 변환해 "서버 경로" 입력란에 [object Object]가 찍히는 문제가 있어(같은
+                    // 스키마에서 두 컴포넌트가 statePath를 공유하면 안 되는 Filament 안티패턴) 분리했다.
+                    // 업로드된 실제 경로는 CreatePage/EditPage의 mutateFormDataBeforeCreate/Save에서
+                    // 진짜 컬럼인 html_file_path로 옮겨 저장한다.
+                    FileUpload::make('html_file_upload')->label('HTML 파일')->disk('uploads')
                         ->acceptedFileTypes(['text/html'])
                         ->visible(fn (callable $get) => $get('content_type') === 'html_file' && $get('html_file_input_mode') !== 'manual')
                         ->dehydrated(fn (callable $get) => $get('html_file_input_mode') !== 'manual')
                         ->saveUploadedFileUsing(fn (TemporaryUploadedFile $file): string => app(UploadService::class)->upload($file, 'pages'))
-                        ->deleteUploadedFileUsing(fn (string $file) => app(UploadService::class)->delete($file)),
+                        ->deleteUploadedFileUsing(fn (string $file) => app(UploadService::class)->delete($file))
+                        ->afterStateHydrated(function (FileUpload $component, ?Page $record) {
+                            if ($record && $record->content_type === 'html_file' && str_starts_with((string) $record->html_file_path, 'uploads/pages/')) {
+                                $component->state($record->html_file_path);
+                            }
+                        }),
                     TextInput::make('html_file_path')->label('서버 경로')
                         ->placeholder('uploads/pages/custom.html')
                         ->helperText('public/ 기준 상대 경로를 입력합니다.')
