@@ -134,6 +134,9 @@ class BoardResource extends Resource
                             Select::make('order_by')->label('기본 정렬')
                                 ->options(['latest' => '최신순', 'views' => '조회순'])
                                 ->native(false)->default('latest'),
+                            Select::make('order_direction')->label('정렬 방향')
+                                ->options(['desc' => '내림차순(최신/많은순)', 'asc' => '오름차순(오래된/적은순)'])
+                                ->native(false)->default('desc'),
                         ])->columns(2),
 
                     Tab::make('댓글 설정')

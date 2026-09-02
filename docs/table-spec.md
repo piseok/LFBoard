@@ -233,6 +233,7 @@
 | `files_per_post` | tinyint | N | 5 |  |  | 글당 첨부파일 최대 개수 |
 | `per_page` | tinyint | N | 15 |  |  | 페이지당 게시글 수 |
 | `order_by` | varchar(255) | N | latest |  |  | 정렬 기준(latest/views 등) |
+| `order_direction` | varchar(255) | N | desc |  |  | 정렬 방향: asc=오름차순, desc=내림차순 |
 | `description` | text | Y |  |  |  | 게시판 설명 |
 | `is_active` | tinyint(1) | N | 1 |  |  | 활성화 여부 |
 | `exclude_from_search` | tinyint(1) | N | 0 |  |  | 통합검색 제외 여부 |

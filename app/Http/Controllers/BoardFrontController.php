@@ -76,7 +76,7 @@ class BoardFrontController extends Controller
 
         // 정렬 기준(작성일/조회수)이 같은 값으로 여러 건 묶일 수 있어(글 복사 등으로 작성일이
         // 완전히 같아지는 경우 포함) id를 2차 정렬 기준으로 둬서 순서를 항상 고정한다.
-        $query->orderBy($board->order_by === 'views' ? 'views' : 'created_at', 'desc')->orderBy('id', 'desc');
+        $query->orderBy($board->order_by === 'views' ? 'views' : 'created_at', $board->order_direction === 'asc' ? 'asc' : 'desc')->orderBy('id', $board->order_direction === 'asc' ? 'asc' : 'desc');
 
         $posts = $query->paginate($board->per_page)->withQueryString();
 

@@ -28,6 +28,7 @@ class Board extends Model
         'files_per_post',
         'per_page',
         'order_by',
+        'order_direction',
         'description',
         'is_active',
         'exclude_from_search',
