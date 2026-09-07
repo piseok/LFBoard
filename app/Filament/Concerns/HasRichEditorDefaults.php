@@ -3,9 +3,16 @@
 namespace App\Filament\Concerns;
 
 use App\Services\UploadService;
+use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\RichEditor;
+use Filament\Forms\Components\RichEditor\EditorCommand;
 use Filament\Forms\Components\RichEditor\RichEditorTool;
+use Filament\Forms\Components\TextInput;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Str;
+use Livewire\Component as LivewireComponent;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 trait HasRichEditorDefaults
@@ -39,6 +46,24 @@ trait HasRichEditorDefaults
     // UploadService::upload(), 확장자+MIME+크기를 실제로 검증하고 실패 시 명확한 에러를 던짐)에만
     // 의존하도록 맞춘다. 파일 크기(maxSize)는 브라우저가 드래그 이벤트에서도 안정적으로 읽는
     // 값이라 계속 클라이언트에서 확인한다.
+    //
+    // **2026-09-07 후속 버그 발견·수정**: 위 빈 배열이 "파일 첨부"(에디터 툴바의 첨부파일 삽입,
+    // Filament\Forms\Components\RichEditor\Actions\AttachFilesAction) 쪽은 전혀 다른 방식으로
+    // 깨뜨렸다 — 그 액션은 내부에서 `FileUpload::make('file')->acceptedFileTypes($component->
+    // getFileAttachmentsAcceptedFileTypes())`를 호출하는데, `BaseFileUpload::acceptedFileTypes()`는
+    // (HasFileAttachments::getUploadedFileAttachment()와 달리) 빈 배열을 falsy로 걸러내는 가드가
+    // 없어 `mimetypes:`.implode(',', [])`, 즉 값이 하나도 없는 `mimetypes:` 규칙을 그대로
+    // 등록해버린다 — 어떤 파일도 빈 허용목록과 매치될 수 없으니 항상 거부됨(사용자 실측:
+    // "파일 항목은 다음 형식의 파일이어야 합니다: ." — Laravel mimetypes 메시지의 :values가
+    // 비어서 나온 것). 이미지 드래그삽입은 `getUploadedFileAttachment()`(가드 있음)를 타서 영향이
+    // 없지만, 툴바의 "파일 첨부" 액션은 100% 항상 실패하는 상태였다.
+    //
+    // 수정: 아래 attachFilesAction()으로 Filament 기본 'attachFiles' 액션을
+    // registerActions()로 덮어쓴다(HasActions::cacheActions()가 이름이 같으면 나중에 등록된
+    // 쪽으로 덮어씀 — vendor AttachFilesAction과 동일 로직이되 acceptedFileTypes() 호출만
+    // 제거). acceptedFileTypes()를 아예 호출하지 않으면 rule() 자체가 안 붙어 Filament 단의
+    // mimetypes 검증이 없어지고(빈 배열 문제도 자연히 사라짐), 실제 검증은 여전히
+    // saveUploadedFileAttachmentUsing()의 UploadService가 전담 — 보안 저하 없음(위 문단과 동일 논리).
     protected static function richEditor(string $name, string $label = '내용'): RichEditor
     {
         return RichEditor::make($name)
@@ -50,6 +75,7 @@ trait HasRichEditorDefaults
             ->saveUploadedFileAttachmentUsing(fn (TemporaryUploadedFile $file): string => app(UploadService::class)->upload($file, 'editor'))
             ->fileAttachmentsAcceptedFileTypes([])
             ->fileAttachmentsMaxSize(20 * 1024)
+            ->registerActions([self::attachFilesAction()])
             ->tools([
                 RichEditorTool::make('insertHtml')
                     ->label('HTML 코드 삽입')
@@ -90,5 +116,93 @@ trait HasRichEditorDefaults
                         JS),
             ])
             ->enableToolbarButtons(['h1', 'h4', 'h5', 'h6', 'insertHtml']);
+    }
+
+    // vendor Filament\Forms\Components\RichEditor\Actions\AttachFilesAction의 복사본 —
+    // 유일한 차이는 FileUpload('file')에 ->acceptedFileTypes(...)를 안 건다는 것뿐(위 richEditor()
+    // 주석의 "2026-09-07 후속 버그" 참고). 나머지 동작(모달 필드 구성, 삽입/수정 커맨드 로직)은
+    // vendor 원본과 동일하게 유지 — Filament 업그레이드로 원본이 바뀌면 이 복사본도 다시 맞출 것.
+    private static function attachFilesAction(): Action
+    {
+        return Action::make('attachFiles')
+            ->label(__('filament-forms::components.rich_editor.actions.attach_files.label'))
+            ->modalHeading(__('filament-forms::components.rich_editor.actions.attach_files.modal.heading'))
+            ->modalWidth(Width::Large)
+            ->fillForm(fn (array $arguments): array => [
+                'alt' => $arguments['alt'] ?? null,
+            ])
+            ->schema(fn (array $arguments, RichEditor $component): array => [
+                FileUpload::make('file')
+                    ->label(filled($arguments['src'] ?? null)
+                        ? __('filament-forms::components.rich_editor.actions.attach_files.modal.form.file.label.existing')
+                        : __('filament-forms::components.rich_editor.actions.attach_files.modal.form.file.label.new'))
+                    ->maxSize($component->getFileAttachmentsMaxSize())
+                    ->storeFiles(false)
+                    ->required(blank($arguments['src'] ?? null))
+                    ->hiddenLabel(blank($arguments['src'] ?? null)),
+                TextInput::make('alt')
+                    ->label(filled($arguments['src'] ?? null)
+                        ? __('filament-forms::components.rich_editor.actions.attach_files.modal.form.alt.label.existing')
+                        : __('filament-forms::components.rich_editor.actions.attach_files.modal.form.alt.label.new'))
+                    ->maxLength(1000),
+            ])
+            ->action(function (array $arguments, array $data, RichEditor $component, LivewireComponent $livewire): void {
+                if ($data['file'] ?? null) {
+                    $id = (string) Str::orderedUuid();
+
+                    data_set($livewire, "componentFileAttachments.{$component->getStatePath()}.{$id}", $data['file']);
+                    $src = $component->getUploadedFileAttachmentTemporaryUrl($data['file']);
+                }
+
+                if (filled($arguments['src'] ?? null)) {
+                    if ($arguments['editorSelection']['type'] !== 'node') {
+                        $arguments['editorSelection']['type'] = 'node';
+                        $arguments['editorSelection']['anchor']--;
+
+                        unset($arguments['editorSelection']['head']);
+                    }
+
+                    $id ??= $arguments['id'] ?? null;
+                    $src ??= $arguments['src'];
+
+                    $component->runCommands(
+                        [
+                            EditorCommand::make('updateAttributes', arguments: [
+                                'image',
+                                [
+                                    'alt' => $data['alt'] ?? null,
+                                    'id' => $id,
+                                    'src' => $src,
+                                ],
+                            ]),
+                        ],
+                        editorSelection: $arguments['editorSelection'],
+                    );
+
+                    return;
+                }
+
+                if (blank($id ?? null)) {
+                    return;
+                }
+
+                if (blank($src ?? null)) {
+                    return;
+                }
+
+                $component->runCommands(
+                    [
+                        EditorCommand::make('insertContent', arguments: [[
+                            'type' => 'image',
+                            'attrs' => [
+                                'alt' => $data['alt'] ?? null,
+                                'id' => $id,
+                                'src' => $src,
+                            ],
+                        ]]),
+                    ],
+                    editorSelection: $arguments['editorSelection'],
+                );
+            });
     }
 }

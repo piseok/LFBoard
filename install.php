@@ -1009,7 +1009,7 @@ DB_USERNAME={$db['username']}
 DB_PASSWORD={$db['password']}
 DB_PREFIX={$db['prefix']}
 
-SESSION_DRIVER=file
+SESSION_DRIVER=database
 SESSION_LIFETIME=120
 SESSION_ENCRYPT=false
 SESSION_PATH=/
