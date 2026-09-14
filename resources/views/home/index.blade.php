@@ -52,8 +52,16 @@
         </section>
     @endif
 
+    @if ($bannerTabs->isNotEmpty())
+        @include('partials.home.banner-tabs')
+    @endif
+
     <h1 class="page-title">{{ app(\App\Services\SiteSettingService::class)->getLocalized('site_name', default: config('app.name')) }}</h1>
     <p>{{ app(\App\Services\SiteSettingService::class)->get('site_description') }}</p>
 
     @include('partials.home.site-search')
 @endsection
+
+@push('scripts')
+    <script src="{{ asset('js/home-banner-tabs.js') }}" defer></script>
+@endpush

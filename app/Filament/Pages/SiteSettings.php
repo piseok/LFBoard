@@ -171,6 +171,13 @@ class SiteSettings extends Page
                     ->addActionLabel('패밀리사이트 추가')
                     ->helperText('비워두면 푸터에 "Family Site" 메뉴 자체가 표시되지 않습니다.')
                     ->columnSpanFull(),
+                // 채팅 지시(2026-09-14, "메인에는 내가 지정한 타입만 나오게 하고 각 타입별로
+                // 버튼이 나오고 전체가 있어") — 게시판이 아니라 배너 관리(BannerResource)의
+                // group_key 기준. FrontController::buildBannerTabs()가 이 값을 읽어 메인 화면에
+                // 탭+슬라이드 섹션을 만든다(partials/home/banner-tabs.blade.php).
+                TextInput::make('home_banner_tab_groups')->label('메인 배너 탭 그룹')
+                    ->helperText('메인 화면에 탭+슬라이드로 노출할 배너 그룹 키를 쉼표로 구분해 입력하세요(예: 인테리어,욕실,주방). 각 값은 배너 관리의 "그룹 키"와 정확히 일치해야 하며, 탭 이름으로도 그대로 쓰입니다. "전체" 탭은 자동으로 맨 앞에 추가됩니다. 비워두면 이 섹션 자체가 표시되지 않습니다.')
+                    ->columnSpanFull(),
             ]);
     }
 

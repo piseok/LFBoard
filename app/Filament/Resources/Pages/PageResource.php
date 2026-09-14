@@ -9,6 +9,7 @@ use App\Filament\Concerns\HasRichEditorDefaults;
 use App\Filament\Resources\Pages\Pages\CreatePage;
 use App\Filament\Resources\Pages\Pages\EditPage;
 use App\Filament\Resources\Pages\Pages\ListPages;
+use App\Http\Controllers\FrontController;
 use App\Models\Banner;
 use App\Models\Language;
 use App\Models\Page;
@@ -152,7 +153,7 @@ class PageResource extends Resource
                 ->schema([
                     TextInput::make('banner_group_key')->label('배너 그룹 키')->maxLength(50)
                         ->placeholder('예: main_top, sidebar_right')
-                        ->helperText(fn () => '비워두면 배너가 표시되지 않습니다. 기존에 쓰인 배너 그룹 키: '
+                        ->helperText(fn () => '비워두면 배너가 표시되지 않습니다. 기본적으로 콘텐츠 맨 위에 표시되며, 콘텐츠 본문(에디터 또는 업로드 HTML 파일) 중간 특정 위치에 넣고 싶으면 그 자리에 "'.FrontController::BANNER_PLACEHOLDER.'"를 그대로 입력해 주세요. 기존에 쓰인 배너 그룹 키: '
                             .(Banner::query()->distinct()->orderBy('group_key')->pluck('group_key')->implode(', ') ?: '없음')),
                 ]),
         ]);
