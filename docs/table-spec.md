@@ -37,7 +37,7 @@
 | 25 | `visit_logs` | 방문 로그(일별/IP/경로) | 7 |
 | 26 | `ai_chat_conversations` | AI 챗봇 대화방(회원별) | 7 |
 | 27 | `ai_chat_messages` | AI 챗봇 대화 메시지 | 6 |
-| 28 | `pages` | 정적 페이지(회사소개 등) | 17 |
+| 28 | `pages` | 정적 페이지(회사소개 등) | 18 |
 
 ---
 
@@ -522,6 +522,7 @@
 | `min_level` | tinyint | N | 1 |  |  | 열람 최소 회원등급 |
 | `is_active` | tinyint(1) | N | 1 |  |  | 활성화 여부 |
 | `sort_order` | int | N | 0 |  |  | 정렬 순서 |
+| `banner_group_key` | varchar(50) | Y |  |  |  | 연동할 배너 그룹 키(banners.group_key) — 비어있으면 배너 미표시 |
 | `created_at` | timestamp | Y |  |  |  | 생성일시 |
 | `updated_at` | timestamp | Y |  |  |  | 수정일시 |
 | `deleted_at` | timestamp | Y |  |  |  | 소프트 삭제일시 |

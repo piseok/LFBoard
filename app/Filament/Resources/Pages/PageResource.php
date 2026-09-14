@@ -9,6 +9,7 @@ use App\Filament\Concerns\HasRichEditorDefaults;
 use App\Filament\Resources\Pages\Pages\CreatePage;
 use App\Filament\Resources\Pages\Pages\EditPage;
 use App\Filament\Resources\Pages\Pages\ListPages;
+use App\Models\Banner;
 use App\Models\Language;
 use App\Models\Page;
 use App\Services\UploadService;
@@ -146,6 +147,14 @@ class PageResource extends Resource
                     TextInput::make('sort_order')->label('순서')->numeric()->default(0),
                     Toggle::make('is_active')->label('활성 상태')->default(true),
                 ])->columns(3),
+
+            Section::make('배너 연동')
+                ->schema([
+                    TextInput::make('banner_group_key')->label('배너 그룹 키')->maxLength(50)
+                        ->placeholder('예: main_top, sidebar_right')
+                        ->helperText(fn () => '비워두면 배너가 표시되지 않습니다. 기존에 쓰인 배너 그룹 키: '
+                            .(Banner::query()->distinct()->orderBy('group_key')->pluck('group_key')->implode(', ') ?: '없음')),
+                ]),
         ]);
     }
 

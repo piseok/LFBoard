@@ -15,18 +15,7 @@ class FrontController extends Controller
 {
     public function index(): View
     {
-        $banners = Banner::query()
-            ->where('group_key', 'main_top')
-            ->where('locale', app()->getLocale())
-            ->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('started_at')->orWhere('started_at', '<=', now());
-            })
-            ->where(function ($q) {
-                $q->whereNull('ended_at')->orWhere('ended_at', '>=', now());
-            })
-            ->orderBy('sort_order')
-            ->get();
+        $banners = $this->activeBanners('main_top');
 
         return view('home.index', compact('banners'));
     }
@@ -54,14 +43,36 @@ class FrontController extends Controller
             default => null,
         };
 
+        // banner_group_key가 비어있으면 배너 섹션 자체를 렌더링하지 않는다(페이지별 선택 연동).
+        $banners = $page->banner_group_key ? $this->activeBanners($page->banner_group_key) : collect();
+
         return view('page.show', [
             'page' => $page,
             'content' => $content,
+            'banners' => $banners,
             'pageTitle' => $page->meta_title ?: $page->title,
             'pageDescription' => $page->meta_description,
             'pageKeywords' => $page->meta_keywords,
             'pageOgImage' => $page->og_image,
         ]);
+    }
+
+    // index()의 메인 히어로 배너 조회와 페이지별 배너 조회가 노출 조건(로케일/활성/기간)을
+    // 그대로 공유하므로, group_key만 받아 재사용한다.
+    private function activeBanners(string $groupKey)
+    {
+        return Banner::query()
+            ->where('group_key', $groupKey)
+            ->where('locale', app()->getLocale())
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('started_at')->orWhere('started_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('ended_at')->orWhere('ended_at', '>=', now());
+            })
+            ->orderBy('sort_order')
+            ->get();
     }
 
     // 검색엔진용 sitemap.xml(SeoController)과 별개로, 사람이 브라우저에서 전체 사이트 구조를

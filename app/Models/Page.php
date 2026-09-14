@@ -23,6 +23,7 @@ class Page extends Model
         'min_level',
         'is_active',
         'sort_order',
+        'banner_group_key',
     ];
 
     protected function casts(): array
