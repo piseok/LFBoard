@@ -61,7 +61,3 @@
 
     @include('partials.home.site-search')
 @endsection
-
-@push('scripts')
-    <script src="{{ asset('js/home-banner-tabs.js') }}" defer></script>
-@endpush

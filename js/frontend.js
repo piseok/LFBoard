@@ -216,6 +216,43 @@ document.addEventListener('DOMContentLoaded', function () {
         gtag('js', new Date());
         gtag('config', gaId);
     }
+
+    // 메인 화면 작업사례 탭(partials/home/banner-tabs.blade.php) — 탭 버튼 클릭 시 해당
+    // 그룹의 패널만 보이게 전환한다. 비활성 패널은 main.css의 .main-cases-panel이
+    // display:none으로 완전히 숨기므로, 그 안의 <x-slider>는 페이지 로드 시점엔 폭 0으로
+    // 잘못 초기화된다 — 탭이 처음 활성화되는 시점에 swiper.update()로 다시 계산시킨다.
+    document.querySelectorAll('[data-cases-tabs]').forEach(function (container) {
+        var tabs = container.querySelectorAll('[data-cases-tab]');
+        var panels = container.querySelectorAll('[data-cases-panel]');
+
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var key = tab.getAttribute('data-cases-tab');
+
+                tabs.forEach(function (t) {
+                    var isActive = t === tab;
+                    t.classList.toggle('is-active', isActive);
+                    t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+
+                panels.forEach(function (panel) {
+                    var isActive = panel.getAttribute('data-cases-panel') === key;
+                    panel.classList.toggle('is-active', isActive);
+
+                    if (isActive) {
+                        panel.removeAttribute('inert');
+
+                        var sliderEl = panel.querySelector('[data-slider]');
+                        if (sliderEl && sliderEl.swiper) {
+                            sliderEl.swiper.update();
+                        }
+                    } else {
+                        panel.setAttribute('inert', '');
+                    }
+                });
+            });
+        });
+    });
 });
 
 // 헤더 / 모바일 전체메뉴 (2026-07 레이아웃) — 스크롤에 따른 헤더 축소/숨김, 모바일 슬라이드

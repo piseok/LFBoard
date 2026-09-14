@@ -178,6 +178,9 @@ class SiteSettings extends Page
                 TextInput::make('home_banner_tab_groups')->label('메인 배너 탭 그룹')
                     ->helperText('메인 화면에 탭+슬라이드로 노출할 배너 그룹 키를 쉼표로 구분해 입력하세요(예: 인테리어,욕실,주방). 각 값은 배너 관리의 "그룹 키"와 정확히 일치해야 하며, 탭 이름으로도 그대로 쓰입니다. "전체" 탭은 자동으로 맨 앞에 추가됩니다. 비워두면 이 섹션 자체가 표시되지 않습니다.')
                     ->columnSpanFull(),
+                TextInput::make('home_banner_tabs_title')->label('메인 배너 탭 섹션 제목')->default('작업사례'),
+                TextInput::make('home_banner_tabs_desc')->label('메인 배너 탭 섹션 설명')
+                    ->helperText('비워두면 표시되지 않습니다.'),
             ]);
     }
 

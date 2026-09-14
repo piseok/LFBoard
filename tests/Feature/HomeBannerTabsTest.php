@@ -39,7 +39,7 @@ class HomeBannerTabsTest extends TestCase
         $response = $this->get(front_route('home'));
 
         $response->assertOk();
-        $response->assertSee('main-banner-tabs', false);
+        $response->assertSee('main-cases', false);
         $response->assertSee('전체');
         $response->assertSee('인테리어');
         $response->assertSee('욕실');
@@ -54,6 +54,6 @@ class HomeBannerTabsTest extends TestCase
         $response = $this->get(front_route('home'));
 
         $response->assertOk();
-        $response->assertDontSee('main-banner-tabs', false);
+        $response->assertDontSee('main-cases', false);
     }
 }
