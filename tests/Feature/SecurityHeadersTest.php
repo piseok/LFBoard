@@ -32,4 +32,16 @@ class SecurityHeadersTest extends TestCase
 
         $response->assertHeaderMissing('Content-Security-Policy');
     }
+
+    public function test_csp_allows_kakao_map_and_youtube_frames(): void
+    {
+        // 관리자가 오시는길 등에 붙여넣는 카카오맵/유튜브 iframe(2026-09-22) — HtmlSanitizerService의
+        // URI.SafeIframeRegexp와 반드시 같은 출처를 허용해야 한다(한쪽만 넓히면 여전히 막힘).
+        $csp = $this->get('/')->headers->get('Content-Security-Policy');
+
+        $this->assertStringContainsString('frame-src', $csp);
+        $this->assertStringContainsString('https://www.youtube.com', $csp);
+        $this->assertStringContainsString('https://www.youtube-nocookie.com', $csp);
+        $this->assertStringContainsString('https://map.kakao.com', $csp);
+    }
 }

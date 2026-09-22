@@ -38,6 +38,13 @@ class SecurityHeaders
                 "script-src 'self' 'nonce-{$nonce}' https://www.googletagmanager.com; ".
                 "style-src 'self' 'unsafe-inline'; ".
                 "img-src 'self' data: https:; ".
+                // 관리자가 오시는길 등 콘텐츠에 카카오맵/유튜브 iframe embed를 직접 붙여넣는 용도
+                // (2026-09-22) — 관리자가 붙여넣는 콘텐츠라 nonce를 붙일 방법이 없어(서버가 렌더링
+                // 시점에 생성하는 값이라 저장된 콘텐츠엔 애초에 못 넣음) frame-src로 출처 자체를
+                // 허용해야 한다. HtmlSanitizerService의 URI.SafeIframeRegexp와 반드시 같은 출처로
+                // 맞출 것 — 한쪽만 넓히면 저장은 되는데 렌더링이 막히거나, 반대로 저장 단계에서
+                // 걸러진다.
+                "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://map.kakao.com; ".
                 "frame-ancestors 'self';"
             );
         }
