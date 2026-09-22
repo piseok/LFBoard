@@ -35,6 +35,12 @@ class HtmlSanitizerService
         $config = HTMLPurifier_Config::createDefault();
         $config->set('HTML.Allowed', self::ALLOWED_ELEMENTS);
         $config->set('Attr.AllowedClasses', self::ALLOWED_CLASSES);
+        // HTML.Allowed에 a[target]을 넣는 것만으로는 부족하다 — HTMLPurifier는 target 값 자체를
+        // 별도로 Attr.AllowedFrameTargets(기본값 빈 배열)로 한 번 더 걸러서, 이게 없으면 에디터에서
+        // "새창"으로 저장한 target="_blank"가 sanitize 단계에서 조용히 지워진다(에러 없이 그냥
+        // 사라짐 — 2026-09-22 실제 버그로 확인: 에디터 링크 다이얼로그에서 새창을 선택해도 실제
+        // 렌더링된 링크는 새창으로 안 열림). _blank만 허용한다.
+        $config->set('Attr.AllowedFrameTargets', ['_blank']);
         // 동적 inline style(예: 진행률 바 width:NN%)이 필요한 컴포넌트가 생기기 전까지는 이 목록을
         // 넓히지 않는다 — org-chart-tree/vertical-timeline 둘 다 정적 마크업만 쓰므로 불필요. 향후
         // 그런 컴포넌트가 추가되면 이 CSS.AllowedProperties 게이트도 함께 검토해야 한다.
