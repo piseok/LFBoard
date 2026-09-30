@@ -75,7 +75,7 @@ class UserResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema->columns(1)->components([
             Section::make('기본 정보')->schema([
                 TextInput::make('name')->label('이름')->required()->maxLength(50),
                 TextInput::make('email')->label('이메일')->email()->required()->maxLength(255)

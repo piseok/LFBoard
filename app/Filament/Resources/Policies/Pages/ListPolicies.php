@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Policies\Pages;
 use App\Filament\Resources\Policies\PolicyResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 
 class ListPolicies extends ListRecords
 {
@@ -13,7 +14,8 @@ class ListPolicies extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon(Heroicon::OutlinedPlus),
         ];
     }
 }

@@ -8,6 +8,7 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -35,7 +36,8 @@ class CategoriesRelationManager extends RelationManager
                 TextColumn::make('sort_order')->label('순서'),
             ])
             ->headerActions([
-                CreateAction::make(),
+                CreateAction::make()
+                    ->icon(Heroicon::OutlinedPlus),
             ])
             ->recordActions([
                 EditAction::make(),

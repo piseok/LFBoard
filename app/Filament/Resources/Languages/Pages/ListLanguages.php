@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Languages\Pages;
 use App\Filament\Resources\Languages\LanguageResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 
 class ListLanguages extends ListRecords
 {
@@ -13,7 +14,8 @@ class ListLanguages extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon(Heroicon::OutlinedPlus),
         ];
     }
 }

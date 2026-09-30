@@ -13,7 +13,6 @@
     "Close": "닫기",
     "Yes": "예",
     "No": "아니오",
-
     "Dashboard": "대시보드",
     "Users": "회원 관리",
     "Boards": "게시판 관리",
@@ -28,7 +27,6 @@
     "Media Library": "미디어 라이브러리",
     "Email Templates": "이메일 템플릿",
     "Maintenance Reports": "유지보수 리포트",
-
     "This field is required.": "필수 입력 항목입니다.",
     "The :attribute field is required.": ":attribute 항목은 필수입니다.",
     "Invalid email or password.": "이메일 또는 비밀번호가 올바르지 않습니다.",

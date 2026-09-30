@@ -23,6 +23,12 @@ class ServerStorageWidget extends BaseWidget
     // 반복 요청과 세션 경합 위험만 남기므로 끈다.
     protected ?string $pollingInterval = null;
 
+
+    protected function getColumns(): int | array | null
+    {
+        return 2;
+    }
+
     // 업로드 파일 용량 / DB 용량은 앱이 직접 통제하는 값이라 정확하지만, disk_free_space()는 공유호스팅에서
     // 계정 자체의 할당량이 아니라 서버 전체(다른 이용자와 공유하는 물리 디스크)의 여유 공간을 반환하는 경우가
     // 흔해서 참고용으로만 안내한다. PHP 함수 자체가 호스팅사 설정(disable_functions)으로 막혀 있을 수도 있어
@@ -34,6 +40,11 @@ class ServerStorageWidget extends BaseWidget
         $freeBytes = $this->diskFreeSpace();
 
         return [
+            Stat::make('서버 디스크 여유 공간', $freeBytes !== null ? $this->formatBytes($freeBytes) : '조회 불가')
+                ->description('공유호스팅에서는 계정 할당량이 아닌 서버 전체 여유 공간일 수 있어 참고용입니다')
+                ->color('warning')
+                ->columnSpan('full'),
+                
             Stat::make('업로드 파일 용량', $this->formatBytes($uploadsBytes))
                 ->description($this->uploadsFolderLabel().' 폴더 전체 크기')
                 ->color('primary'),
@@ -41,10 +52,6 @@ class ServerStorageWidget extends BaseWidget
             Stat::make('데이터베이스 용량', $dbBytes !== null ? $this->formatBytes($dbBytes) : '조회 불가')
                 ->description('전체 테이블 데이터+인덱스 합계')
                 ->color('success'),
-
-            Stat::make('서버 디스크 여유 공간', $freeBytes !== null ? $this->formatBytes($freeBytes) : '조회 불가')
-                ->description('공유호스팅에서는 계정 할당량이 아닌 서버 전체 여유 공간일 수 있어 참고용입니다')
-                ->color('warning'),
         ];
     }
 

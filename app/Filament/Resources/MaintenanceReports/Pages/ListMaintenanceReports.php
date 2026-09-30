@@ -5,6 +5,7 @@ namespace App\Filament\Resources\MaintenanceReports\Pages;
 use App\Filament\Resources\MaintenanceReports\MaintenanceReportResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 
 class ListMaintenanceReports extends ListRecords
 {
@@ -13,7 +14,8 @@ class ListMaintenanceReports extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon(Heroicon::OutlinedPlus),
         ];
     }
 }

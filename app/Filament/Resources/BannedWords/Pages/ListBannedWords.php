@@ -10,6 +10,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 
 class ListBannedWords extends ListRecords
 {
@@ -54,7 +55,8 @@ class ListBannedWords extends ListRecords
                         ->success()
                         ->send();
                 }),
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon(Heroicon::OutlinedPlus),
         ];
     }
 }

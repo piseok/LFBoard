@@ -51,7 +51,7 @@ class MenuResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema->columns(1)->components([
             Section::make()
                 ->description('상위 메뉴를 먼저 생성한 후 하위 메뉴를 추가하세요. 최대 3단계까지 지원합니다.')
                 ->schema([

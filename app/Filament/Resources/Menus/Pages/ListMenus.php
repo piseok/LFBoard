@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Menus\Pages;
 use App\Filament\Resources\Menus\MenuResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 
 class ListMenus extends ListRecords
 {
@@ -13,7 +14,8 @@ class ListMenus extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->icon(Heroicon::OutlinedPlus),
         ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Banners\Pages;
 use App\Filament\Resources\Banners\BannerResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 
 class ListBanners extends ListRecords
 {
@@ -13,7 +14,8 @@ class ListBanners extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+            ->icon(Heroicon::OutlinedPlus),
         ];
     }
 }
