@@ -143,11 +143,24 @@
                 @if ($post && $post->files->isNotEmpty())
                     <ul class="board-file-list">
                         @foreach ($post->files as $file)
-                            <li>{{ $file->original_name }} ({{ number_format($file->file_size / 1024, 1) }} KB)</li>
+                            @php $markedForDeletion = in_array($file->id, (array) old('delete_files', [])); @endphp
+                            <li style="display: flex; align-items: center;">
+                                @if (str_starts_with((string) $file->mime_type, 'image/'))
+                                    <img src="{{ url($file->file_path) }}" alt="{{ $file->original_name }}" loading="lazy"
+                                         style="width:60px; height:60px; object-fit:contain; flex-shrink:0; margin-right:8px;">
+                                @endif
+                                {{ $file->original_name }} ({{ number_format($file->file_size / 1024, 1) }} KB)
+                                <label style="display:inline-flex; align-items:center; gap:4px; margin:0 0 0 8px; font-weight:400;">
+                                    <input type="checkbox" name="delete_files[]" value="{{ $file->id }}" style="width:auto;" @checked($markedForDeletion)>
+                                    {{ __('삭제') }}
+                                </label>
+                            </li>
                         @endforeach
                     </ul>
-                    <p class="hint">{{ __('기존 첨부파일은 유지됩니다. 새 파일은 남은 개수만큼 추가됩니다.') }}</p>
+                    <p class="hint">{{ __('삭제에 체크한 파일은 수정 완료 시 삭제됩니다. 새 파일은 삭제 후 남은 개수만큼 추가됩니다.') }}</p>
                 @endif
+                @error('delete_files')<p class="field-error">{{ $message }}</p>@enderror
+                @error('delete_files.*')<p class="field-error">{{ $message }}</p>@enderror
             </div>
         @endif
 

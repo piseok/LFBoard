@@ -119,7 +119,15 @@
     <main id="main-content" class="main-content">
         <div class="container">
             @if (session('status'))
-                <div class="alert alert-success" role="status">{{ session('status') }}</div>
+                <x-dialog-modal
+                    id="status-modal"
+                    class-name="status-modal"
+                    data-model="status-modal"
+                    content="{{ session('status') }}"
+                    autoClose="3000"
+                    :data-action="session('inquiry_submitted') ? '/' : null"
+                    :auto-open="true"
+                />
             @endif
             @if ($errors->any())
                 <div class="alert alert-error" role="alert">

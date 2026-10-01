@@ -403,6 +403,11 @@ class BoardFrontController extends Controller
 
         $validated = $this->validatePost($request, $board, isUpdate: true, isDraft: $isDraft);
 
+        $deleteFiles = $board->allow_file ? $request->validate([
+            'delete_files' => ['nullable', 'array'],
+            'delete_files.*' => ['integer', Rule::exists('post_files', 'id')->where('post_id', $post->id)],
+        ]) : [];
+
         $post->category_id = $validated['category_id'] ?? null;
         $post->title = $validated['title'];
         $post->content = $board->use_editor
@@ -412,6 +417,11 @@ class BoardFrontController extends Controller
         $post->is_draft = $isDraft;
         $post->custom_fields = $validated['custom_fields'] ?? [];
         $post->save();
+
+        foreach ($post->files()->whereIn('id', $deleteFiles['delete_files'] ?? [])->get() as $file) {
+            app(UploadService::class)->delete($file->file_path);
+            $file->delete();
+        }
 
         $this->storeFiles($request, $board, $post);
 

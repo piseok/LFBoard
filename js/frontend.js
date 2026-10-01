@@ -391,4 +391,152 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+
+    // 모든 폼은 실제 제출 후 15초 동안 중복 제출을 막는다.
+    function formSubmitLock_hanlder () {
+        const formSubmitLocks = new WeakMap();
+
+        document.addEventListener('submit', function (event) {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+
+            const lockedUntil = formSubmitLocks.get(form) || 0;
+            if (Date.now() < lockedUntil) {
+                event.preventDefault();
+                return;
+            }
+
+            // 동의 확인, 삭제 확인, 캡차 등에서 취소된 제출은 잠그지 않는다.
+            if (event.defaultPrevented) return;
+
+            formSubmitLocks.set(form, Date.now() + 15000);
+            const submitButtons = Array.from(form.querySelectorAll('button[type="submit"], input[type="submit"]'))
+                .filter(function (button) {
+                    return button.form === form && !button.disabled;
+                });
+
+            const submitButtonStates = submitButtons.map(function (button) {
+                return {
+                    button: button,
+                    isInput: button instanceof HTMLInputElement,
+                    hasText: button.textContent.trim() !== '',
+                    originalValue: button.value,
+                    originalNodes: Array.from(button.childNodes)
+                };
+            });
+
+            // 클릭한 제출 버튼의 name/value가 전송 데이터에 포함된 뒤 표시를 변경한다.
+            window.setTimeout(function () {
+                submitButtonStates.forEach(function (state) {
+                    state.button.disabled = true;
+                    if (state.isInput) {
+                        state.button.value = '처리중...';
+                    } else {
+                        const loader = document.createElement('span');
+                        loader.className = 'loader';
+                        loader.setAttribute('aria-hidden', 'true');
+                        if (state.hasText) {
+                            state.button.replaceChildren(loader, document.createTextNode(' 처리중...'));
+                        } else {
+                            state.button.replaceChildren(loader);
+                        }
+                    }
+                });
+            }, 0);
+
+            window.setTimeout(function () {
+                formSubmitLocks.delete(form);
+                submitButtonStates.forEach(function (state) {
+                    if (state.isInput) {
+                        state.button.value = state.originalValue;
+                    } else {
+                        state.button.replaceChildren(...state.originalNodes);
+                    }
+                    state.button.disabled = false;
+                });
+            }, 15000);
+        });
+    }
+
+    formSubmitLock_hanlder();
+
+    // dialog 모달
+    (function(){
+        const openBtns = document.querySelectorAll('.modal_openBtn');
+        const closeBtns = document.querySelectorAll('.modal_closeBtn');
+        const dialogs = document.querySelectorAll('dialog[data-modal]');
+        const autoCloseTimers = new WeakMap();
+
+        function openDialog(dialog) {
+            const autoCloseDelay = Number(dialog.dataset.autoClose);
+            window.clearTimeout(autoCloseTimers.get(dialog));
+            dialog.showModal();
+            autoCloseTimers.set(dialog, window.setTimeout(() => {
+                if (dialog.open) dialog.close();
+                autoCloseTimers.delete(dialog);
+            }, autoCloseDelay));
+        }
+
+        dialogs.forEach((dialog) => {
+            dialog.addEventListener('close', () => {
+                window.clearTimeout(autoCloseTimers.get(dialog));
+                autoCloseTimers.delete(dialog);
+            });
+        });
+
+        // 1. 버튼의 data-modal과 일치하는 모달 열기
+        openBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const modalName = btn.dataset.modal;
+                const dialog = Array.from(dialogs).find(
+                    (item) => item.dataset.modal === modalName
+                );
+
+                if (dialog && !dialog.open) {
+                    openDialog(dialog);
+                }
+            });
+        });
+
+        // 열기 버튼 없이 렌더링된 알림 모달 자동 열기
+        dialogs.forEach((dialog) => {
+            if (dialog.dataset.autoOpen === 'true' && !dialog.open) {
+                openDialog(dialog);
+            }
+        });
+
+        // 2. 닫기 버튼이 포함된 모달 닫기
+        closeBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const dialog = btn.closest('dialog');
+                const actionUrl = btn.dataset.action;
+
+                if (dialog?.open) {
+                    dialog.close();
+                }
+
+                if (actionUrl) {
+                    try {
+                        const targetUrl = new URL(actionUrl, window.location.origin);
+
+                        if (['http:', 'https:'].includes(targetUrl.protocol)) {
+                            window.location.assign(targetUrl.href);
+                        }
+                    } catch (error) {
+                        console.warn('올바르지 않은 모달 이동 URL입니다.', actionUrl);
+                    }
+                }
+            });
+        });
+
+        // 3. 모달 바깥(backdrop) 클릭 시 닫기
+        dialogs.forEach((dialog) => {
+            dialog.addEventListener('click', (e) => {
+                if (e.target === dialog) {
+                    dialog.close();
+                }
+            });
+        });
+    })();
 })();
