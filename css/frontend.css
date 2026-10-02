@@ -71,22 +71,146 @@
     --radius-pill: 999px;
 }
 
-* { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+
+html {
+    line-height: 1.4;
+	-webkit-text-size-adjust: 100%;
+	tab-size: 4;
+    font-size: 100%;
+}
 
 body {
     margin: 0;
+    padding: 0;
     font-family: "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
     color: var(--color-text);
     background: var(--color-bg);
     line-height: 1.6;
+    font-size: 16px; /* 이걸 지우면 html의 font-size가 100%가 rem을 쓰지 않는 일반 폰트에도 전부 적용됨. */
+}
+
+
+
+
+@media (max-width: 1760px) {
+	html {
+		font-size: 87.5%;
+		/* 8px */
+	}
+}
+
+
+@media (max-width: 1024px) {
+
+	html {
+		font-size: 81.25%;
+		/* 7px */
+	}
+}
+
+@media (max-width: 680px) {
+	html {
+		font-size: 68.75%;
+		/* 6px */
+	}
 }
 
 a { color: var(--color-primary-dark); text-decoration: none; }
 a:hover, a:focus-visible { text-decoration: underline; }
-h1,h2,h3,h4,h5 {margin: 0; padding: 0;}
-img { max-width: 100%; height: auto; }
+a {
+	text-decoration: none;
+	background-color: transparent;
+	color: inherit;
+}
+/* a:hover, a:focus-visible { text-decoration: underline; } */
+
+img,
+picture,
+video,
+canvas,
+svg { max-width: 100%; height: auto; display: block;}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+b,
+strong,
+a,
+span {
+	letter-spacing: -5%;
+}
+
+ul,
+ol, li {
+	list-style: none;
+}
+
+table {
+	border-color: currentcolor;
+}
+
+/* 테이블 기본 스타일 초기화 */
+table {
+  width: 100%;                  /* 기본 너비를 100%로 설정 (필요에 따라 조절) */
+  border-collapse: collapse;    /* 셀과 셀 사이의 테두리를 하나로 합침 */
+  border-spacing: 0;           /* 셀 간격 제거 (border-collapse 미지원 대비) */
+}
+
+/* 테이블 셀 및 헤더 초기화 */
+th, td {
+  padding: 0;                  /* 여백 초기화 */
+  vertical-align: middle;       /* 세로 정렬 중앙 (필요에 따라 top/bottom으로 변경) */
+}
+
+/* Caption(제목/설명) 초기화 */
+caption {
+  caption-side: top;           /* 캡션 위치 (기본값 top) */
+  text-align: left;            /* 캡션 정렬 */
+}
+
+/* 접근성: 키보드 포커스 표시, 스킵 링크 */
+:focus-visible {
+    outline: 3px solid var(--color-main);
+    outline-offset: 2px;
+}
+
+button {background: transparent; border: none;}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+	font-family: var(--pretendard);
+	/* 1 */
+	font-size: 100%;
+	/* 1 */
+	line-height: 1.15;
+	/* 1 */
+	margin: 0;
+	/* 2 */
+}
+
+button,
+[type='button'],
+[type='reset'],
+[type='submit'] {
+	-webkit-appearance: button;
+}
 
 /* 접근성: 키보드 포커스 표시, 스킵 링크 */
 :focus-visible {
@@ -141,7 +265,19 @@ img { max-width: 100%; height: auto; }
   }
 }
 
+/* ...처리 텍스트 */
+.ellipsis {
+   display: -webkit-inline-box;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   -webkit-box-orient: vertical;
+   /* lineclamp랑 white-space는 1줄, 2줄 다 다르니 따로 기입 */
+}
 
+
+.text-center {text-align: center !important;}
+.text-left {text-align: left !important;}
+.text-right {text-align: right !important;}
 
 
 .container {

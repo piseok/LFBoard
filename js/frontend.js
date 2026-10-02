@@ -393,6 +393,43 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
+    // 스크롤 애니메이션
+
+    // 사용법
+    // 1. animationElements에 사용하려는 클래스명을 등록한다.
+    // 2. css에 가서 해당 클래스를 선언해서 애니메이션 동작 전 초기상태를 작성.
+    // 3. 애니메이션 클래스명 뒤에 .trigger를 붙이고 애니메이션 동작 css를 작성.
+    // 4. 애니메이션마다 delay를 다르게 주고 싶으면 애니메이션 클래스를 준 html에
+    // data-delay=""속성을 주고 0.5s 이런식으로 작성해준다.
+
+    // 1. 관찰자(Observer) 생성
+    const observer = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            // 요소가 화면에 뷰포트와 교차(등장)했을 때
+            if (entry.isIntersecting) {
+                if(entry.target.dataset.delay) {
+                    entry.target.style.animationDelay = entry.target.dataset.delay;
+                }
+
+                entry.target.classList.add('trigger'); // 애니메이션 클래스 추가
+                // 만약 한 번만 실행하고 감지를 멈추고 싶다면
+                observer.unobserve(entry.target);
+            }
+        });
+    }, {
+        threshold: 0.2 // 요소가 화면에 20% 보일 때 작동
+    });
+
+    // 2. 관찰할 대상(Target)들을 지정하여 관찰 시작
+    const animationElements = document.querySelectorAll(
+        '.animate-custom, .chars, .fade-top, .box-fade-top, .fade-down, .fade-left, .fade-right, .title-deco, .line-path'
+    );
+
+    animationElements.forEach(el => observer.observe(el));
+
+    // 스크롤 애니메이션 end
+
+
     // 모든 폼은 실제 제출 후 15초 동안 중복 제출을 막는다.
     function formSubmitLock_hanlder () {
         const formSubmitLocks = new WeakMap();

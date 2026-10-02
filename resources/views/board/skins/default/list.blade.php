@@ -1,7 +1,8 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <x-sub-header :title="$board->name" :description="$board->description">
+    <x-sub-header>
+        <!-- :title="$board->name" :description="$board->description" -->
         @if ($categories->isNotEmpty())
             <x-slot:nav>
                 <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
@@ -55,6 +56,16 @@
     @php $colCount = 5 + ($categories->isNotEmpty() ? 1 : 0) + ($hasRecruitmentPosts ? 1 : 0) + ($board->allow_comment ? 1 : 0); @endphp
     <table class="board-list">
         <caption class="sr-only">{{ __(':name 게시글 목록', ['name' => $board->name]) }}</caption>
+
+        <colgroup>
+            <col style="width: 10%;">
+            <col style="width: 30%;">
+            <col style="width: 15%;">
+            <col style="width: 15%;">
+            <col style="width: 10%;">
+            <col style="width: 10%;">
+        </colgroup>
+
         <thead>
             <tr>
                 <th scope="col" class="col-num">{{ __('번호') }}</th>
@@ -81,7 +92,7 @@
                     @if ($categories->isNotEmpty())
                         <td>{{ $notice->category?->name ?? '-' }}</td>
                     @endif
-                    <td>
+                    <td class="col-title text-left">
                         @if ($notice->is_global_notice && $noticeBoard && $noticeBoard->id !== $board->id)
                             <span class="post-meta">[{{ $noticeBoard->name }}]</span>
                         @endif
@@ -94,7 +105,7 @@
                     @if ($hasRecruitmentPosts)
                         <td class="col-recruitment">@include('partials.shared.recruitment-period-cell', ['post' => $notice])</td>
                     @endif
-                    <td>{{ $notice->user?->nickname ?? $notice->user?->name ?? $notice->author_name ?? __('관리자') }}</td>
+                    <td class="col-writer">{{ $notice->user?->nickname ?? $notice->user?->name ?? $notice->author_name ?? __('관리자') }}</td>
                     <td class="col-date">{{ local_datetime($notice->created_at)->format('Y-m-d') }}</td>
                     <td class="col-views">{{ $notice->views }}</td>
                     @if ($board->allow_comment)
@@ -109,7 +120,7 @@
                     @if ($categories->isNotEmpty())
                         <td>{{ $post->category?->name ?? '-' }}</td>
                     @endif
-                    <td>
+                    <td class="col-title text-left">
                         <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $post->id]) }}">
                             {{ $post->title }}
                             @if ($post->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
@@ -119,7 +130,7 @@
                     @if ($hasRecruitmentPosts)
                         <td class="col-recruitment">@include('partials.shared.recruitment-period-cell', ['post' => $post])</td>
                     @endif
-                    <td>{{ $post->user?->nickname ?? $post->user?->name ?? $post->author_name ?? __('비회원') }}</td>
+                    <td class="col-writer">{{ $post->user?->nickname ?? $post->user?->name ?? $post->author_name ?? __('비회원') }}</td>
                     <td class="col-date">{{ local_datetime($post->created_at)->format('Y-m-d') }}</td>
                     <td class="col-views">{{ $post->views }}</td>
                     @if ($board->allow_comment)

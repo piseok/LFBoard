@@ -29,7 +29,8 @@
                 <div class="board-post-images">
                     @foreach ($imageFiles as $file)
                         <a href="{{ url($file->file_path) }}" target="_blank" rel="noopener">
-                            <img src="{{ url($file->file_path) }}" alt="{{ $file->original_name }}">
+                            <img src="{{ url($file->file_path) }}" alt="{{ $file->original_name }}" style="width: 50px; height: 50px; object-fit: cover;">
+                            <span class="ellipsis">{{ $file->original_name }}</span>
                         </a>
                     @endforeach
                 </div>
@@ -41,7 +42,12 @@
                     <ul class="board-file-list">
                         @foreach ($otherFiles as $file)
                             <li>
-                                <a href="{{ url($file->file_path) }}" download="{{ $file->original_name }}">{{ $file->original_name }}</a>
+                                <a href="{{ url($file->file_path) }}" download="{{ $file->original_name }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="17" viewBox="0 0 14 17" fill="none">
+                                        <path d="M8.126 0H0V17H13.6V5.474L8.126 0ZM8.5 2.176L11.424 5.1H8.5V2.176ZM1.275 15.725V1.275H7.225V5.3125C7.225 5.899 7.701 6.375 8.2875 6.375H12.325V15.725H1.275Z" fill="#555555"/>
+                                    </svg>
+                                    {{ $file->original_name }}
+                                </a>
                                 <span class="post-meta">({{ number_format($file->file_size / 1024, 1) }} KB)</span>
                             </li>
                         @endforeach

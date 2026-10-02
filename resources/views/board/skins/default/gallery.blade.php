@@ -83,16 +83,50 @@
     @if ($boardNoticesOnly->isNotEmpty())
         <div class="board-gallery-grid" style="margin-bottom: 20px;">
             @foreach ($boardNoticesOnly as $notice)
-                @php $thumb = $notice->files->first(fn ($f) => str_starts_with((string) $f->mime_type, 'image/')); @endphp
                 <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $notice->id]) }}" class="board-gallery-item">
-                    @if ($thumb)
-                        <img src="{{ url($thumb->file_path) }}" alt="">
-                    @else
-                        <div style="aspect-ratio:4/3; background: var(--color-bg-alt); display:flex; align-items:center; justify-content:center; color: var(--color-text-muted);">No Image</div>
-                    @endif
-                    <div class="board-gallery-body">
+                    <figure class="thumb">
                         <span class="badge badge-notice">{{ __('공지') }}</span>
-                        <p style="margin: 6px 0 0; font-weight: 600;">{{ $notice->title }}</p>
+                        @php
+                            $thumbSrc = null;
+                            $thumbAlt = $notice->title;
+                            $postContent = (string) $notice->content;
+
+                            if ($postContent !== '') {
+                                $document = new \DOMDocument();
+                                $previousErrors = libxml_use_internal_errors(true);
+                                try {
+                                    $document->loadHTML('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $postContent . '</body></html>');
+                                    foreach ($document->getElementsByTagName('img') as $image) {
+                                        $src = trim($image->getAttribute('src'));
+                                        if ($src !== '') {
+                                            $thumbSrc = $src;
+                                            $thumbAlt = $image->getAttribute('alt') ?: $notice->title;
+                                            break;
+                                        }
+                                    }
+                                } finally {
+                                    libxml_clear_errors();
+                                    libxml_use_internal_errors($previousErrors);
+                                }
+                            }
+
+                            if ($thumbSrc === null) {
+                                $thumb = $notice->files->first(fn ($file) => str_starts_with((string) $file->mime_type, 'image/'));
+                                if ($thumb) {
+                                    $thumbSrc = url($thumb->file_path);
+                                    $thumbAlt = $thumb->original_name;
+                                }
+                            }
+                        @endphp
+                        @if ($thumbSrc)
+                            <img src="{{ $thumbSrc }}" alt="{{ $thumbAlt }}" draggable="false">
+                        @else
+                            <x-no-img />
+                        @endif
+                    </figure>
+                    <div class="board-gallery-body">
+                        <p class="title" style="margin: 6px 0 0; font-weight: 600;">{{ $notice->title }}</p>
+                        <p class="post-meta" style="margin: 4px 0 0;">{{ $notice->user?->nickname ?? $notice->user?->name ?? $notice->author_name ?? __('비회원') }} · {{ local_datetime($notice->created_at)->format('Y-m-d') }}</p>
                         <p class="board-gallery-icons">
                             @if ($notice->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
                             @if ($board->allow_comment && $notice->comments_count)<span class="board-list-comment-count"><svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>{{ $notice->comments_count }}</span>@endif
@@ -108,13 +142,48 @@
         @forelse ($posts as $post)
             @php $thumb = $post->files->first(fn ($f) => str_starts_with((string) $f->mime_type, 'image/')); @endphp
             <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $post->id]) }}" class="board-gallery-item">
-                @if ($thumb)
-                    <img src="{{ url($thumb->file_path) }}" alt="">
-                @else
-                    <div style="aspect-ratio:4/3; background: var(--color-bg-alt); display:flex; align-items:center; justify-content:center; color: var(--color-text-muted);">No Image</div>
-                @endif
+                <figure class="thumb">
+                    @php
+                        $thumbSrc = null;
+                        $thumbAlt = $post->title;
+                        $postContent = (string) $post->content;
+
+                        if ($postContent !== '') {
+                            $document = new \DOMDocument();
+                            $previousErrors = libxml_use_internal_errors(true);
+                            try {
+                                $document->loadHTML('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $postContent . '</body></html>');
+                                foreach ($document->getElementsByTagName('img') as $image) {
+                                    $src = trim($image->getAttribute('src'));
+                                    if ($src !== '') {
+                                        $thumbSrc = $src;
+                                        $thumbAlt = $image->getAttribute('alt') ?: $post->title;
+                                        break;
+                                    }
+                                }
+                            } finally {
+                                libxml_clear_errors();
+                                libxml_use_internal_errors($previousErrors);
+                            }
+                        }
+
+                        if ($thumbSrc === null) {
+                            $thumb = $post->files->first(fn ($file) => str_starts_with((string) $file->mime_type, 'image/'));
+                            if ($thumb) {
+                                $thumbSrc = url($thumb->file_path);
+                                $thumbAlt = $thumb->original_name;
+                            }
+                        }
+                    @endphp
+                    @if ($thumbSrc)
+                        <img src="{{ $thumbSrc }}" alt="{{ $thumbAlt }}" draggable="false">
+                    @else
+                        <x-no-img />
+                    @endif
+                </figure>
+
                 <div class="board-gallery-body">
-                    <p style="margin: 0; font-weight: 600;">
+                    <p class="title ellipsis" style="margin: 0; font-weight: 600;">
                         {{ $post->title }}
                         @if ($post->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
                     </p>
