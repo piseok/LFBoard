@@ -196,7 +196,7 @@
                 </div>
             </a>
         @empty
-            <p style="text-align:center; padding: 40px 0; color: var(--color-text-muted); grid-column: 1/-1;">{{ __('등록된 게시글이 없습니다.') }}</p>
+            <x-no-post />
         @endforelse
     </div>
 

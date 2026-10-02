@@ -86,7 +86,7 @@
                         @if ($thumb)
                             <img src="{{ url($thumb->file_path) }}" alt="{{ $thumb->original_name }}" draggable="false">
                         @else
-                            <span class="no-image">{{ __('이미지 없음') }}</span>
+                            <x-no-img />
                         @endif
                     </figure>
 
