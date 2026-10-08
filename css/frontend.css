@@ -4,6 +4,7 @@
     --color-primary: #b45309;
     --color-primary-dark: #92400e;
     --color-text: #1f2937;
+    --color-text-sub: #7B7D89;
     --color-text-muted: #6b7280;
     --color-border: #e5e7eb;
     --color-bg: #ffffff;
@@ -373,6 +374,7 @@ button,
     line-height: 1.4;
     cursor: pointer;
     transition: background var(--control-transition), border-color var(--control-transition), color var(--control-transition);
+    min-width: 60px;
 }
 .btn:hover { background: var(--color-bg-alt); text-decoration: none; }
 .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--color-primary-ring); }
@@ -390,6 +392,17 @@ button,
 
 .btn-ghost { background: transparent; border-color: transparent; color: var(--color-primary); }
 .btn-ghost:hover { background: var(--color-primary-soft); text-decoration: none; }
+
+.btn-primary-black {
+    background: #3D4754;
+    border-color: #3D4754;
+    color: #fff;
+}
+
+.btn-primary-black:hover {
+    background: #21252b;
+    border-color: #21252b;
+}
 
 .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
 .btn-lg { padding: 12px 24px; font-size: 1rem; }

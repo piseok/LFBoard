@@ -1,45 +1,42 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <x-sub-header :title="$board->name" :description="$board->description">
-        @if ($categories->isNotEmpty())
-            <x-slot:nav>
-                <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
-                    <a href="{{ front_route('board.index', $board->slug) }}" class="{{ request()->filled('category') ? '' : 'is-active' }}">{{ __('전체') }}</a>
-                    @foreach ($categories as $category)
-                        <a href="{{ front_route('board.index', ['slug' => $board->slug, 'category' => $category->id]) }}"
-                           class="{{ (int) request('category') === $category->id ? 'is-active' : '' }}">{{ $category->name }}</a>
-                    @endforeach
-                </nav>
-            </x-slot:nav>
-        @endif
-    </x-sub-header>
-
     <div class="board-toolbar">
       <div class="board-toolbar-left">
-        <p class="board-count-info">{{ __('총 :total건 (:current/:last 페이지)', ['total' => $posts->total(), 'current' => $posts->currentPage(), 'last' => max($posts->lastPage(), 1)]) }}</p>
+        <p class="board-count-info">
+            {{ __('총') }} <b>{{ $posts->total() }}</b>{{ __('건') }}
+            <small>
+                {{ __('(:current/:last 페이지)', [
+                    'current' => $posts->currentPage(),
+                    'last' => max($posts->lastPage(), 1),
+                ]) }}
+            </small>
+        </p>
+
         <form method="GET" action="{{ front_route('board.index', $board->slug) }}" class="board-search-form">
-            @if (request()->filled('category'))
-                <input type="hidden" name="category" value="{{ request('category') }}">
-            @endif
-            @if ($hasRecruitmentPosts)
-                <label for="recruitment_status" class="sr-only">{{ __('모집 상태') }}</label>
-                <select id="recruitment_status" name="recruitment_status">
-                    <option value="" @selected(request('recruitment_status', '') === '')>{{ __('모집 상태 전체') }}</option>
-                    <option value="예정" @selected(request('recruitment_status') === '예정')>{{ __('접수예정') }}</option>
-                    <option value="기간중" @selected(request('recruitment_status') === '기간중')>{{ __('접수중') }}</option>
-                    <option value="마감" @selected(request('recruitment_status') === '마감')>{{ __('접수마감') }}</option>
+            <div class="search-wrap">
+                @if (request()->filled('category'))
+                    <input type="hidden" name="category" value="{{ request('category') }}">
+                @endif
+                @if ($hasRecruitmentPosts)
+                    <label for="recruitment_status" class="sr-only">{{ __('모집 상태') }}</label>
+                    <select id="recruitment_status" name="recruitment_status">
+                        <option value="" @selected(request('recruitment_status', '') === '')>{{ __('모집 상태 전체') }}</option>
+                        <option value="예정" @selected(request('recruitment_status') === '예정')>{{ __('접수예정') }}</option>
+                        <option value="기간중" @selected(request('recruitment_status') === '기간중')>{{ __('접수중') }}</option>
+                        <option value="마감" @selected(request('recruitment_status') === '마감')>{{ __('접수마감') }}</option>
+                    </select>
+                @endif
+                <label for="search_type" class="sr-only">{{ __('검색 조건') }}</label>
+                <select id="search_type" name="search_type">
+                    <option value="title" @selected(request('search_type', 'title') === 'title')>{{ __('제목') }}</option>
+                    <option value="content" @selected(request('search_type') === 'content')>{{ __('내용') }}</option>
+                    <option value="author" @selected(request('search_type') === 'author')>{{ __('작성자') }}</option>
                 </select>
-            @endif
-            <label for="search_type" class="sr-only">{{ __('검색 조건') }}</label>
-            <select id="search_type" name="search_type">
-                <option value="title" @selected(request('search_type', 'title') === 'title')>{{ __('제목') }}</option>
-                <option value="content" @selected(request('search_type') === 'content')>{{ __('내용') }}</option>
-                <option value="author" @selected(request('search_type') === 'author')>{{ __('작성자') }}</option>
-            </select>
-            <label for="q" class="sr-only">{{ __('검색어') }}</label>
-            <input type="text" id="q" name="q" value="{{ request('q') }}" placeholder="{{ __('검색어 입력') }}">
-            <button type="submit" class="btn">{{ __('검색') }}</button>
+                <label for="q" class="sr-only">{{ __('검색어') }}</label>
+                <input type="text" id="q" name="q" value="{{ request('q') }}" placeholder="{{ __('검색어 입력') }}">
+            </div>
+            <button type="submit" class="btn btn-primary-black">{{ __('검색') }}</button>
         </form>
       </div>
 
@@ -51,6 +48,20 @@
             @endif
         @endauth
     </div>
+
+    @if ($categories->isNotEmpty())
+        <x-sub-header>
+            <x-slot:nav>
+                <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
+                    <a href="{{ front_route('board.index', $board->slug) }}" class="{{ request()->filled('category') ? '' : 'is-active' }}">{{ __('전체') }}</a>
+                    @foreach ($categories as $category)
+                        <a href="{{ front_route('board.index', ['slug' => $board->slug, 'category' => $category->id]) }}"
+                           class="{{ (int) request('category') === $category->id ? 'is-active' : '' }}">{{ $category->name }}</a>
+                    @endforeach
+                </nav>
+            </x-slot:nav>
+        </x-sub-header>
+    @endif
 
     {{--
         FAQ는 목록 페이지에서 바로 질문을 펼쳐 답을 보여주는 아코디언 형태가 자연스러워서,

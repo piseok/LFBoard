@@ -1,46 +1,43 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <x-sub-header>
-        <!-- :title="$board->name" :description="$board->description" -->
-        @if ($categories->isNotEmpty())
-            <x-slot:nav>
-                <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
-                    <a href="{{ front_route('board.index', $board->slug) }}" class="{{ request()->filled('category') ? '' : 'is-active' }}">{{ __('전체') }}</a>
-                    @foreach ($categories as $category)
-                        <a href="{{ front_route('board.index', ['slug' => $board->slug, 'category' => $category->id]) }}"
-                           class="{{ (int) request('category') === $category->id ? 'is-active' : '' }}">{{ $category->name }}</a>
-                    @endforeach
-                </nav>
-            </x-slot:nav>
-        @endif
-    </x-sub-header>
 
     <div class="board-toolbar">
       <div class="board-toolbar-left">
-        <p class="board-count-info">{{ __('총 :total건 (:current/:last 페이지)', ['total' => $posts->total(), 'current' => $posts->currentPage(), 'last' => max($posts->lastPage(), 1)]) }}</p>
+        
+        <p class="board-count-info">
+            {{ __('총') }} <b>{{ $posts->total() }}</b>{{ __('건') }}
+            <small>
+                {{ __('(:current/:last 페이지)', [
+                    'current' => $posts->currentPage(),
+                    'last' => max($posts->lastPage(), 1),
+                ]) }}
+            </small>
+        </p>
         <form method="GET" action="{{ front_route('board.index', $board->slug) }}" class="board-search-form">
-            @if (request()->filled('category'))
-                <input type="hidden" name="category" value="{{ request('category') }}">
-            @endif
-            @if ($hasRecruitmentPosts)
-                <label for="recruitment_status" class="sr-only">{{ __('모집 상태') }}</label>
-                <select id="recruitment_status" name="recruitment_status">
-                    <option value="" @selected(request('recruitment_status', '') === '')>{{ __('모집 상태 전체') }}</option>
-                    <option value="예정" @selected(request('recruitment_status') === '예정')>{{ __('접수예정') }}</option>
-                    <option value="기간중" @selected(request('recruitment_status') === '기간중')>{{ __('접수중') }}</option>
-                    <option value="마감" @selected(request('recruitment_status') === '마감')>{{ __('접수마감') }}</option>
+            <div class="search-wrap">
+                @if (request()->filled('category'))
+                    <input type="hidden" name="category" value="{{ request('category') }}">
+                @endif
+                @if ($hasRecruitmentPosts)
+                    <label for="recruitment_status" class="sr-only">{{ __('모집 상태') }}</label>
+                    <select id="recruitment_status" name="recruitment_status">
+                        <option value="" @selected(request('recruitment_status', '') === '')>{{ __('모집 상태 전체') }}</option>
+                        <option value="예정" @selected(request('recruitment_status') === '예정')>{{ __('접수예정') }}</option>
+                        <option value="기간중" @selected(request('recruitment_status') === '기간중')>{{ __('접수중') }}</option>
+                        <option value="마감" @selected(request('recruitment_status') === '마감')>{{ __('접수마감') }}</option>
+                    </select>
+                @endif
+                <label for="search_type" class="sr-only">{{ __('검색 조건') }}</label>
+                <select id="search_type" name="search_type">
+                    <option value="title" @selected(request('search_type', 'title') === 'title')>{{ __('제목') }}</option>
+                    <option value="content" @selected(request('search_type') === 'content')>{{ __('내용') }}</option>
+                    <option value="author" @selected(request('search_type') === 'author')>{{ __('작성자') }}</option>
                 </select>
-            @endif
-            <label for="search_type" class="sr-only">{{ __('검색 조건') }}</label>
-            <select id="search_type" name="search_type">
-                <option value="title" @selected(request('search_type', 'title') === 'title')>{{ __('제목') }}</option>
-                <option value="content" @selected(request('search_type') === 'content')>{{ __('내용') }}</option>
-                <option value="author" @selected(request('search_type') === 'author')>{{ __('작성자') }}</option>
-            </select>
-            <label for="q" class="sr-only">{{ __('검색어') }}</label>
-            <input type="text" id="q" name="q" value="{{ request('q') }}" placeholder="{{ __('검색어 입력') }}">
-            <button type="submit" class="btn">{{ __('검색') }}</button>
+                <label for="q" class="sr-only">{{ __('검색어') }}</label>
+                <input type="text" id="q" name="q" value="{{ request('q') }}" placeholder="{{ __('검색어 입력') }}">
+            </div>
+            <button type="submit" class="btn btn-primary-black">{{ __('검색') }}</button>
         </form>
       </div>
 
@@ -48,6 +45,21 @@
             <a href="{{ front_route('board.create', $board->slug) }}" class="btn btn-primary">{{ __('글쓰기') }}</a>
         @endif
     </div>
+
+    @if ($categories->isNotEmpty())
+        <x-sub-header>
+            <!-- :title="$board->name" :description="$board->description" -->
+            <x-slot:nav>
+                <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
+                    <a href="{{ front_route('board.index', $board->slug) }}" class="{{ request()->filled('category') ? '' : 'is-active' }}">{{ __('전체') }}</a>
+                    @foreach ($categories as $category)
+                        <a href="{{ front_route('board.index', ['slug' => $board->slug, 'category' => $category->id]) }}"
+                            class="{{ (int) request('category') === $category->id ? 'is-active' : '' }}">{{ $category->name }}</a>
+                    @endforeach
+                </nav>
+            </x-slot:nav>
+        </x-sub-header>
+    @endif
 
     @php
         // 전체공지(다른 게시판에도 노출되는 공지)는 갤러리 그리드가 아니라 표(리스트) 형태로 보여준다.
@@ -125,9 +137,19 @@
                         @endif
                     </figure>
                     <div class="board-gallery-body">
-                        <p class="title" style="margin: 6px 0 0; font-weight: 600;">{{ $notice->title }}</p>
-                        <p class="post-meta" style="margin: 4px 0 0;">{{ $notice->user?->nickname ?? $notice->user?->name ?? $notice->author_name ?? __('비회원') }} · {{ local_datetime($notice->created_at)->format('Y-m-d') }}</p>
-                        <p class="board-gallery-icons">
+                        <p class="title">{{ $notice->title }}</p>
+                        
+                        <p class="item-content ellipsis">
+                            {{ strip_tags($notice->content ?? '') }}
+                        </p>
+                        <p class="post-meta" style="margin: 4px 0 0;">
+                            <span>
+                                {{ $notice->user?->nickname ?? $notice->user?->name ?? $notice->author_name ?? __('비회원') }} · 
+                            </span>
+                            <span>
+                                {{ local_datetime($notice->created_at)->format('Y-m-d') }}
+                            </span> 
+
                             @if ($notice->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
                             @if ($board->allow_comment && $notice->comments_count)<span class="board-list-comment-count"><svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>{{ $notice->comments_count }}</span>@endif
                         </p>
@@ -180,12 +202,19 @@
                 </figure>
 
                 <div class="board-gallery-body">
-                    <p class="title ellipsis" style="margin: 0; font-weight: 600;">
+                    <p class="title ellipsis">
                         {{ $post->title }}
                         @if ($post->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
                     </p>
-                    <p class="post-meta" style="margin: 4px 0 0;">{{ $post->user?->nickname ?? $post->user?->name ?? $post->author_name ?? __('비회원') }} · {{ local_datetime($post->created_at)->format('Y-m-d') }}</p>
-                    <p class="board-gallery-icons">
+
+                    <p class="item-content ellipsis">
+                        {{ strip_tags($notice->content ?? '') }}
+                    </p>
+
+                    <p class="post-meta" style="margin: 4px 0 0;">
+                        <span>{{ $post->user?->nickname ?? $post->user?->name ?? $post->author_name ?? __('비회원') }} · </span>
+                        <span>{{ local_datetime($post->created_at)->format('Y-m-d') }}</span>
+
                         @if ($post->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
                         @if ($board->allow_comment && $post->comments_count)<span class="board-list-comment-count"><svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>{{ $post->comments_count }}</span>@endif
                     </p>
