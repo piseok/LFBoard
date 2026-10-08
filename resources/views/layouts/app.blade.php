@@ -117,30 +117,28 @@
     @include('partials.layout.policy-notice-banner')
 
     <main id="main-content" class="main-content">
-        <div class="container">
-            @if (session('status'))
-                <x-dialog-modal
-                    id="status-modal"
-                    class-name="status-modal"
-                    data-model="status-modal"
-                    content="{{ session('status') }}"
-                    autoClose="3000"
-                    :data-action="session('inquiry_submitted') ? '/' : null"
-                    :auto-open="true"
-                />
-            @endif
-            @if ($errors->any())
-                <div class="alert alert-error" role="alert">
-                    <ul style="margin:0;padding-left:18px;">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
+        @if (session('status'))
+            <x-dialog-modal
+                id="status-modal"
+                class-name="status-modal"
+                data-model="status-modal"
+                content="{{ session('status') }}"
+                autoClose="3000"
+                :data-action="session('inquiry_submitted') ? '/' : null"
+                :auto-open="true"
+            />
+        @endif
+        @if ($errors->any())
+            <div class="alert alert-error" role="alert">
+                <ul style="margin:0;padding-left:18px;">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-            @yield('content')
-        </div>
+        @yield('content')
     </main>
 
     @include('partials.layout.footer')

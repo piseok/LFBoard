@@ -1,7 +1,8 @@
 @extends('layouts.subpage')
 
 @section('subcontent')
-    <x-sub-header :title="$board->name" :description="$board->description">
+    <x-sub-header>
+        <!-- :title="$board->name" :description="$board->description" -->
         @if ($categories->isNotEmpty())
             <x-slot:nav>
                 <nav class="board-category-filter" aria-label="{{ __('카테고리 필터') }}">
@@ -80,8 +81,7 @@
         </table>
     @endif
 
-    @if ($boardNoticesOnly->isNotEmpty())
-        <div class="board-gallery-grid" style="margin-bottom: 20px;">
+    <div class="board-gallery-grid">
             @foreach ($boardNoticesOnly as $notice)
                 <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $notice->id]) }}" class="board-gallery-item">
                     <figure class="thumb">
@@ -135,10 +135,7 @@
                     </div>
                 </a>
             @endforeach
-        </div>
-    @endif
 
-    <div class="board-gallery-grid">
         @forelse ($posts as $post)
             @php $thumb = $post->files->first(fn ($f) => str_starts_with((string) $f->mime_type, 'image/')); @endphp
             <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $post->id]) }}" class="board-gallery-item">
@@ -196,7 +193,9 @@
                 </div>
             </a>
         @empty
-            <x-no-post />
+            @if ($notices->isEmpty())
+                <x-no-post />
+            @endif
         @endforelse
     </div>
 

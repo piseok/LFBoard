@@ -68,22 +68,28 @@
                     ? $sanitizer->clean((string) $notice->content)
                     : nl2br(e((string) $notice->content));
             @endphp
-            <details class="board-faq-item">
-                <summary class="board-faq-question">
+            <div class="board-faq-item" data-toggle="hidden">
+                <div class="board-faq-question">
                     <span class="board-faq-q-badge">Q</span>
-                    <span class="badge badge-notice">{{ $notice->is_global_notice ? __('전체공지') : __('공지') }}</span>
-                    @if ($notice->is_global_notice && $noticeBoard && $noticeBoard->id !== $board->id)
-                        <span class="post-meta">[{{ $noticeBoard->name }}]</span>
-                    @endif
-                    {{ $notice->title }}
-                    @if ($notice->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
-                    @if ($notice->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
-                </summary>
-                <div class="board-faq-answer">
-                    <span class="board-faq-a-badge">A</span>
-                    <div class="post-content">{!! $answerHtml !!}</div>
+                    <p>
+                        <span class="badge badge-notice">{{ $notice->is_global_notice ? __('전체공지') : __('공지') }}</span>
+                        @if ($notice->is_global_notice && $noticeBoard && $noticeBoard->id !== $board->id)
+                            <span class="post-meta">[{{ $noticeBoard->name }}]</span>
+                        @endif
+                        {{ $notice->title }}
+                        @if ($notice->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
+                        @if ($notice->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
+                    </p>
+                    <button type="button" class="faq-toggle"></button>
                 </div>
-            </details>
+
+                <div class="board-faq-answer">
+                    <div class="board-faq-answer-inner">
+                        <span class="board-faq-a-badge">A</span>
+                        <div class="faq-content">{!! $answerHtml !!}</div>
+                    </div>
+                </div>
+            </div>
         @endforeach
 
         @forelse ($posts as $post)
@@ -92,21 +98,35 @@
                     ? $sanitizer->clean((string) $post->content)
                     : nl2br(e((string) $post->content));
             @endphp
-            <details class="board-faq-item">
-                <summary class="board-faq-question">
-                    <span class="board-faq-q-badge">Q</span>
-                    {{ $post->title }}
-                    @if ($post->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
-                    @if ($post->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
-                </summary>
-                <div class="board-faq-answer">
-                    <span class="board-faq-a-badge">A</span>
-                    <div class="post-content">{!! $answerHtml !!}</div>
-                    @if ($board->allow_comment || ($board->allow_file && $post->files->isNotEmpty()))
-                        <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $post->id]) }}" class="board-faq-detail-link">{{ __('상세보기 (댓글/첨부파일)') }} &rarr;</a>
-                    @endif
+            <div class="board-faq-item" data-toggle="hidden">
+                <div class="board-faq-question">
+                    <div class="faq-header">
+                        <span class="board-faq-q-badge">Q</span>
+                        <p>
+                            {{ $post->title }}
+                            @if ($post->is_secret)<span class="badge badge-secret">{{ __('비밀글') }}</span>@endif
+                            @if ($post->files->isNotEmpty())<svg class="board-list-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="{{ __('첨부파일 있음') }}"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>@endif
+                        </p>
+                    </div>
+                    <button type="button" class="faq-toggle">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="7" viewBox="0 0 12 7" fill="none">
+                        <path d="M0.987342 0.118727L6.06539 4.85962L10.9813 -0.000113641L11.9988 1.02943L6.09433 6.8657L-0.000270235 1.17626L0.987342 0.118727Z" fill="#69707D"/>
+                        </svg>
+                    </button>
                 </div>
-            </details>
+                <div class="board-faq-answer">
+                    <div class="board-faq-answer-inner">
+                        <div class="answer-header">
+                            <span class="board-faq-a-badge">A</span>
+
+                            @if ($board->allow_comment || ($board->allow_file && $post->files->isNotEmpty()))
+                                <a href="{{ front_route('board.show', ['slug' => $board->slug, 'id' => $post->id]) }}" class="board-faq-detail-link">{{ __('상세보기 (댓글/첨부파일)') }} &rarr;</a>
+                            @endif
+                        </div>
+                        <div class="faq-content">{!! $answerHtml !!}</div>
+                    </div>
+                </div>
+            </div>
         @empty
             <p style="text-align:center; padding: 40px 0; color: var(--color-text-muted);">{{ __('등록된 게시글이 없습니다.') }}</p>
         @endforelse

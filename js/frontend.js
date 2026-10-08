@@ -54,19 +54,34 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    function closePopup(popup) {
+        if (! popup || ! popup.classList.contains('open') || popup.classList.contains('closing')) {
+            return;
+        }
+
+        popup.addEventListener('animationend', function onEnd(event) {
+            if (event.target !== popup || event.animationName !== 'popup-close') {
+                return;
+            }
+
+            popup.classList.remove('open', 'closing');
+            popup.removeEventListener('animationend', onEnd);
+        });
+
+        popup.classList.add('closing');
+    }
+
     document.querySelectorAll('.site-popup').forEach(function (popup) {
         var id = popup.getAttribute('data-popup-id');
         if (id && ! hasHideCookie(id)) {
-            popup.style.display = 'block';
+            popup.classList.add('open');
         }
     });
 
     document.querySelectorAll('.popup-close-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var popup = btn.closest('.site-popup');
-            if (popup) {
-                popup.style.display = 'none';
-            }
+            closePopup(popup);
         });
     });
 
@@ -83,9 +98,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.cookie = 'hide_popup_' + id + '=1;path=/;max-age=86400';
             }
 
-            if (popup) {
-                popup.style.display = 'none';
-            }
+            closePopup(popup);
         });
     });
 
@@ -281,6 +294,7 @@ document.addEventListener('DOMContentLoaded', function () {
         accordion();
         familySite();
         resizeEvent();
+        faqToggler();
     }
 
     function stickyHeader() {
@@ -391,6 +405,34 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    // faq 토글
+    function faqToggler() {
+        const $faqList = document.querySelector('.board-faq-list');
+
+        if (!$faqList) return;
+
+        const $faqItems = $faqList.querySelectorAll('.board-faq-item');
+
+        $faqItems.forEach((item, index) => {
+            const $question = item.querySelector('.board-faq-question');
+            if (index === 0) item.dataset.toggle = 'open';
+
+            if (!$question) return;
+
+            $question.addEventListener('click', () => {
+                const isOpen = item.dataset.toggle === 'open';
+
+                $faqItems.forEach((faqItem) => {
+                    faqItem.dataset.toggle = 'hidden';
+                });
+
+                item.dataset.toggle = isOpen ? 'hidden' : 'open';
+            });
+        });
+    }
+
+
 
 
     // 스크롤 애니메이션

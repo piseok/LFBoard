@@ -52,14 +52,16 @@
         </section>
     @endif
 
-    {{-- isset() 방어: 컨트롤러 반영 없이 뷰만 먼저 배포되는 드리프트에도 이 섹션만 조용히
-         생략되게 한다(page/show.blade.php의 동일 방어와 같은 이유, 2026-09-14). --}}
-    @if (isset($bannerTabs) && $bannerTabs->isNotEmpty())
-        @include('partials.home.banner-tabs')
-    @endif
-
-    <h1 class="page-title">{{ app(\App\Services\SiteSettingService::class)->getLocalized('site_name', default: config('app.name')) }}</h1>
-    <p>{{ app(\App\Services\SiteSettingService::class)->get('site_description') }}</p>
-
-    @include('partials.home.site-search')
+    <div class="container">
+        {{-- isset() 방어: 컨트롤러 반영 없이 뷰만 먼저 배포되는 드리프트에도 이 섹션만 조용히
+             생략되게 한다(page/show.blade.php의 동일 방어와 같은 이유, 2026-09-14). --}}
+        @if (isset($bannerTabs) && $bannerTabs->isNotEmpty())
+            @include('partials.home.banner-tabs')
+        @endif
+        
+        <h1 class="page-title">{{ app(\App\Services\SiteSettingService::class)->getLocalized('site_name', default: config('app.name')) }}</h1>
+        <p>{{ app(\App\Services\SiteSettingService::class)->get('site_description') }}</p>
+        
+        @include('partials.home.site-search')
+    </div>
 @endsection

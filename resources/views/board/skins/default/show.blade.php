@@ -76,12 +76,14 @@
         <div class="form-actions">
             <a href="{{ front_route('board.index', $board->slug) }}" class="btn">{{ __('목록') }}</a>
             @if ($canModify)
-                <a href="{{ front_route('board.edit', ['slug' => $board->slug, 'id' => $post->id]) }}" class="btn">{{ __('수정') }}</a>
-                <form method="POST" action="{{ front_route('board.destroy', ['slug' => $board->slug, 'id' => $post->id]) }}" data-confirm="{{ __('삭제하시겠습니까?') }}" style="display:inline;">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-danger">{{ __('삭제') }}</button>
-                </form>
+                <div class="edit">
+                    <a href="{{ front_route('board.edit', ['slug' => $board->slug, 'id' => $post->id]) }}" class="btn">{{ __('수정') }}</a>
+                    <form method="POST" action="{{ front_route('board.destroy', ['slug' => $board->slug, 'id' => $post->id]) }}" data-confirm="{{ __('삭제하시겠습니까?') }}" style="display:inline;">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-danger">{{ __('삭제') }}</button>
+                    </form>
+                </div>
             @elseif (is_null($post->user_id))
                 <a href="{{ front_route('board.edit', ['slug' => $board->slug, 'id' => $post->id]) }}" class="btn">{{ __('비밀번호 확인 후 수정/삭제') }}</a>
             @endif

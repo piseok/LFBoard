@@ -701,19 +701,86 @@ a.is-locked { color: var(--color-text-muted); }
     border-radius: 10px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.2);
     overflow: hidden;
+
+    display: none;
+    opacity: 0;
 }
-.site-popup-header { display: flex; justify-content: flex-end; padding: 6px; }
-.site-popup-body { padding: 0 16px 12px; overflow: auto; }
-.site-popup-footer { display: flex; justify-content: space-between; padding: 10px 16px; border-top: 1px solid var(--color-border); font-size: 0.82rem; }
+
+.site-popup.open {
+    display: block;
+    animation: popup-open 0.25s forwards;
+}
+
+.site-popup.closing {
+    animation: popup-close 0.25s forwards;
+    pointer-events: none;
+}
+
+@keyframes popup-open {
+    from {opacity: 0;}
+    to {opacity: 1;}
+}
+
+@keyframes popup-close {
+    from {opacity: 1;}
+    to {opacity: 0;}
+}
+
+.popup-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    border-radius: 100px;
+    padding: 0;
+
+    font-size: 10px;
+
+    width: 3em;
+    height: 3em;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    color: #fff;
+    border: 2px solid #fff;
+    opacity: 0.5;
+}
+
+.popup-close-btn:hover {
+    background: transparent;
+    opacity: 1;
+}
+
+.popup-close-btn svg {
+    position: relative;
+    left: 0.5px;
+    top: 0.5px;
+    width: 12px;
+    height: 12px;
+}
+
+.site-popup-body { overflow: auto; }
+.site-popup-footer { display: flex; justify-content: space-between; padding: 10px; border-top: 1px solid var(--color-border); font-size: 13px; }
+.site-popup-footer > label { display: flex; align-items: center; gap: 5px; }
 .site-popup[data-position="center"] { top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .site-popup[data-position="top-left"] { top: 20px; left: 20px; }
 .site-popup[data-position="top-right"] { top: 20px; right: 20px; }
 .site-popup[data-position="bottom-left"] { bottom: 20px; left: 20px; }
 .site-popup[data-position="bottom-right"] { bottom: 20px; right: 20px; }
 
+@media (max-width: 680px) {
+    .popup-close-btn {
+        font-size: 8px;
+    }
+    .popup-close-btn svg {
+        width: 10px;
+        height: 10px;
+    }
+}
+
 /* 약관/방침 사전고지 배너 */
 .policy-notice-banner { background: #fffbeb; border-bottom: 1px solid #fde68a; padding: 10px 20px; }
-.policy-notice-message { margin: 0; font-size: 0.85rem; color: #92400e; max-width: var(--max-width); margin: 0 auto; }
+.policy-notice-message { margin: 0; font-size: 13px; color: #92400e; max-width: var(--max-width); margin: 0 auto; }
 .policy-notice-message a { color: #92400e; text-decoration: underline; }
 
 /* 쿠키 동의 배너 */

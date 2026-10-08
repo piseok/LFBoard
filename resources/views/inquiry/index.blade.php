@@ -47,10 +47,12 @@
 
         {{ $inquiries->links() }}
     @else
-        <p>{{ __('비회원으로 접수하신 상담은 접수 완료 시 안내된 화면(비밀번호 확인)을 통해 확인하실 수 있습니다.') }}</p>
-        <p class="hint">{{ __('접수 링크를 분실하셨다면 상담 접수번호와 비밀번호를 확인 후 다시 접속해 주세요.') }}</p>
-        <div class="form-actions">
-            <a href="{{ front_route('inquiry.create') }}" class="btn btn-primary">{{ __('글쓰기') }}</a>
+        <div class="no_member_text">
+            <p>{{ __('비회원으로 접수하신 상담은 접수 완료 시 안내된 화면(비밀번호 확인)을 통해 확인하실 수 있습니다.') }}</p>
+            <p class="hint">{{ __('접수 링크를 분실하셨다면 상담 접수번호와 비밀번호를 확인 후 다시 접속해 주세요.') }}</p>
+            <div class="form-actions">
+                <a href="{{ front_route('inquiry.create') }}" class="btn btn-primary">{{ __('글쓰기') }}</a>
+            </div>
         </div>
     @endauth
 @endsection

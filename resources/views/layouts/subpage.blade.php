@@ -29,25 +29,76 @@
 --}}
 @extends('layouts.app')
 
+
+
+{{-- 
+
+    261008 - 자주 사용되는 서브배너 스타일로 sub-hero ui 변경
+    배너 생성에서 그룹키 sub_banner 소속인 것들만 불러와서 각 배너의 제목이
+    sub_banner_ i(index) 인 것들만 불러와 메뉴의 상위 그룹의 인덱스 번호와 일치하는 것을 메뉴의 서브베너로 불러옵니다. 배너 그룹이 없거나 제목이 sub_banner_ i 가 아닌 경우에는 css에 있는 일반 배경색으로 처리됩니다.
+
+--}}
+
 @section('content')
     @php
         $subHeroTop = app(\App\Services\MenuService::class)
             ->getActiveBranch(request()->path(), auth()->user()?->level ?? \App\Models\User::LEVEL_GUEST)['top'];
+
+        $subHeroImage = null;
+
+        if ($subHeroTop) {
+            // 로그인 등급에 따라 메뉴가 숨겨져도 배너 번호는 같은 메뉴 그룹에 고정한다.
+            $subHeroMenuIndex = \App\Models\Menu::query()
+                ->whereNull('parent_id')
+                ->where('locale', app()->getLocale())
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->pluck('id')
+                ->search($subHeroTop['id'], true);
+
+            if ($subHeroMenuIndex !== false) {
+                // 첫 번째 최상위 메뉴는 sub_banner_1, 두 번째는 sub_banner_2 제목의 배너를 사용한다.
+                $subHeroImage = \App\Models\Banner::query()
+                    ->where('group_key', 'sub_banner')
+                    ->where('title', 'sub_banner_'.($subHeroMenuIndex + 1))
+                    ->where('locale', app()->getLocale())
+                    ->where('is_active', true)
+                    ->where('content_type', 'image')
+                    ->whereNotNull('image_path')
+                    ->where(function ($query) {
+                        $query->whereNull('started_at')->orWhere('started_at', '<=', now());
+                    })
+                    ->where(function ($query) {
+                        $query->whereNull('ended_at')->orWhere('ended_at', '>=', now());
+                    })
+                    ->orderBy('sort_order')
+                    ->orderBy('id')
+                    ->value('image_path');
+            }
+        }
     @endphp
     @if ($subHeroTop)
-        <section class="sub-hero">
+        <section class="sub-hero" @if ($subHeroImage) style="background-image: url('{{ url($subHeroImage) }}');" @endif>
             <h1 class="sub-hero__title">{{ $subHeroTop['title'] }}</h1>
+
+            <div class="container">
+                @include('partials.shared.breadcrumb')
+            </div>
         </section>
     @endif
-    @include('partials.shared.breadcrumb')
     <div class="content-layout">
-        @hasSection('local-nav')
-            @yield('local-nav')
-        @else
-            @include('partials.shared.local-nav')
-        @endif
-        <div class="content-main">
-            @yield('subcontent')
+
+        <div class="content-main container">
+            @hasSection('local-nav')
+                @yield('local-nav')
+            @else
+                @include('partials.shared.local-nav')
+            @endif
+
+            <div class="content-wrapper">
+                @yield('subcontent')
+            </div>
         </div>
     </div>
 @endsection
