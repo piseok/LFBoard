@@ -153,8 +153,10 @@ class PostDraftTest extends TestCase
 
         $response = $this->actingAs($member)->get('/search?q='.urlencode('검색용'));
 
-        $response->assertSee('검색용 정식글');
-        $response->assertDontSee('검색용 초안');
+        // 2026-10-12: 검색어 강조용 <mark>로 제목 HTML이 나뉘므로 기존 assertSee 대신
+        // assertSeeText로 화면에 표시되는 제목을 확인하여 임시저장 글 제외 여부를 검증한다.
+        $response->assertSeeText('검색용 정식글');
+        $response->assertDontSeeText('검색용 초안');
     }
 
     public function test_draft_does_not_appear_in_sitemap(): void

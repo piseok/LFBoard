@@ -626,6 +626,212 @@ table.board-list th {
 .board-file-list { list-style: none; margin: 0; padding: 0; }
 .board-file-list li { padding: 6px 0; }
 
+/* 2026-10-12: 통합검색 화면을 기존 board-toolbar/board-list 조합에서 search-* 전용 레이아웃으로 변경.
+   상단 요약과 최대 800px 검색창, 사각형 게시판 탭, 게시판별 결과 목록을 첨부 디자인에 맞춰 추가한다.
+   검색어와 건수는 붉은색으로, 검색 아이콘과 게시판 제목 표시는 파란색으로 강조한다. */
+.search-page {
+    --search-accent: #00aeef;
+    --search-highlight: #ef3f59;
+    color: var(--color-text);
+}
+
+.search-hero { padding: 32px 0; background: #f7f8fa; }
+.search-summary {
+    margin: 0 0 22px;
+    font-size: clamp(22px, 2.1vw, 30px);
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+.search-summary-keyword, .search-summary-count { color: var(--search-highlight); }
+
+.search-form {
+    display: flex;
+    align-items: stretch;
+    max-width: 800px;
+    min-height: 60px;
+    margin: 0 auto;
+    border: 1px solid #d9dce1;
+    background: #fff;
+}
+.search-form:focus-within { border-color: var(--search-accent); }
+.search-form input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    padding: 15px 20px;
+    border: 0;
+    border-radius: 0;
+    font-size: 16px;
+    box-shadow: none;
+}
+.search-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 60px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--search-accent);
+    cursor: pointer;
+}
+.search-submit:hover { background: #f1faff; }
+.search-submit:focus-visible,
+.search-tabs a:focus-visible,
+.search-board-more:focus-visible {
+    outline: 2px solid var(--search-accent);
+    outline-offset: -3px;
+}
+
+/* 2026-10-12: 기존 둥근 게시판 필터를 같은 폭의 사각형 탭으로 변경.
+   선택된 탭은 진한 배경으로 구분하고, 탭이 화면보다 많으면 가로로 스크롤한다. */
+.search-results { padding-top: 36px; }
+.search-tabs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(150px, 1fr);
+    margin-bottom: 34px;
+    overflow-x: auto;
+}
+.search-tabs a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+    padding: 12px 16px;
+    border: 1px solid #cfd3d9;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+}
+.search-tabs a + a { border-left: 0; }
+.search-tabs a:hover { background: #f7f8fa; text-decoration: none; }
+.search-tabs a.is-active { background: #3d4754; border-color: #3d4754; color: #fff; }
+
+/* 2026-10-12: 게시판별 구분 제목, 원형 표시와 더보기의 더하기 아이콘 스타일 추가. */
+.search-board-section + .search-board-section { margin-top: 38px; }
+.search-board-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-text);
+}
+.search-board-title {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.search-board-title::before {
+    content: '';
+    align-self: center;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-right: 3px;
+    border: 3px solid var(--search-accent);
+    border-radius: 50%;
+}
+.search-board-more {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 8px;
+    font-size: 14px;
+}
+.search-more-icon {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    border: 1px solid #cfd3d9;
+    border-radius: 4px;
+    background: #fff;
+}
+.search-more-icon::before, .search-more-icon::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 12px;
+    height: 1px;
+    background: currentColor;
+    transform: translate(-50%, -50%);
+}
+.search-more-icon::after { transform: translate(-50%, -50%) rotate(90deg); }
+
+/* 2026-10-12: 테이블 대신 경로·제목·본문 요약·작성 정보를 세로로 배치한다.
+   본문 요약은 최대 두 줄로 표시하고, 결과 사이의 구분선과 검색어 강조 스타일을 추가한다. */
+.search-result-item { padding: 20px 0; border-bottom: 1px solid #cfd3d9; }
+.search-result-path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin: 0 0 4px;
+    color: var(--color-text-sub);
+    font-size: 14px;
+}
+.search-result-title { margin: 0 0 5px; font-size: 20px; font-weight: 600; line-height: 1.5; }
+.search-result-title a { overflow-wrap: anywhere; }
+.search-result-excerpt {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    color: var(--color-text-sub);
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.search-highlight { padding: 0; background: transparent; color: var(--search-highlight); font-weight: inherit; }
+.search-result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: 8px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+.search-empty {
+    margin: 0;
+    padding: 60px 20px;
+    border-bottom: 1px solid #cfd3d9;
+    color: var(--color-text-muted);
+    font-size: 15px;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+/* 2026-10-12: 모바일에서는 검색창 높이, 글자 크기와 결과 간격을 줄여 배치한다. */
+@media (max-width: 680px) {
+    .search-hero { padding: 26px 0; }
+    .search-summary { margin-bottom: 18px; font-size: 22px; }
+    .search-form { min-height: 54px; }
+    .search-form input[type="text"] { padding: 12px 14px; }
+    .search-submit { width: 52px; }
+    .search-results { padding-top: 24px; }
+    .search-tabs { grid-auto-columns: minmax(140px, 1fr); margin-bottom: 26px; }
+    .search-tabs a { min-height: 52px; font-size: 14px; }
+    .search-board-section + .search-board-section { margin-top: 28px; }
+    .search-board-title { font-size: 19px; }
+    .search-board-more { gap: 5px; font-size: 13px; }
+    .search-result-title { font-size: 18px; }
+    .search-result-item { padding: 18px 0; }
+}
+
 @media (max-width: 680px) {
     .board-toolbar {flex-direction: column; width: 100%;}
     .board-toolbar-left {

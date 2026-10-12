@@ -1080,6 +1080,7 @@ dialog .modal-header .modal_closeBtn {
     border: none;
     border-radius: none;
     color: #666;
+    min-width: unset;
 }
 
 dialog .modal-header .modal_closeBtn svg {
@@ -1108,14 +1109,14 @@ dialog .modal-footer {
 }
 
 dialog .modal-footer .modal_closeBtn {
-    background: var(--color-primary);
+    background: #333;
     width: 100%;
     color: #fff;
     transition: background-color 0.3s;
 }
 
 dialog .modal-footer .modal_closeBtn:hover {
-    background: var(--color-primary-dark);
+    background: #111;
 }
 
 /* confirm 모달은 뒷배경 없애기 */

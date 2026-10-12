@@ -123,7 +123,7 @@
                 class-name="status-modal"
                 data-model="status-modal"
                 content="{{ session('status') }}"
-                autoClose="3000"
+                autoClose="30000000"
                 :data-action="session('inquiry_submitted') ? '/' : null"
                 :auto-open="true"
             />
