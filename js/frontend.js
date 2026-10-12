@@ -618,4 +618,141 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
     })();
+
+    // custom-select 컴포넌트
+    function customSelect_create() {
+        class CustomSelect {
+            static init() {
+                document.querySelectorAll(".ui-select").forEach((el) => {
+                    if (!el.dataset.init) {
+                        new CustomSelect(el);
+                        el.dataset.init = "true";
+                    }
+                });
+            }
+
+            constructor(root) {
+                this.root = root;
+                this.select = root.querySelector("select");
+                this.button = root.querySelector(".ui-select-btn");
+                this.list = root.querySelector(".ui-select-list");
+
+                this.render();
+
+                if (window.matchMedia("(pointer: coarse)").matches) {
+                    // 모바일에선 브라우저 셀렉트 열기 형식으로 전환
+                    this.bindMobile();
+                } else {
+                    this.bindDesktop();
+                }
+            }
+
+            render() {
+                this.list.innerHTML = "";
+
+                [...this.select.options].forEach((option) => {
+                    const li = document.createElement("li");
+
+                    li.textContent = option.textContent;
+                    li.dataset.value = option.value;
+
+                    if (option.disabled) {
+                        li.classList.add("disabled");
+                    }
+
+                    if (option.selected) {
+                        li.classList.add("active");
+                        this.button.textContent = option.textContent;
+                    }
+
+                    this.list.appendChild(li);
+                });
+
+                if (!this.button.textContent) {
+                    this.button.textContent =
+                        this.root.dataset.placeholder ||
+                        this.select.options[0]?.textContent ||
+                        "선택";
+                }
+            }
+
+            bindDesktop() {
+                this.button.addEventListener("click", (e) => {
+                    e.stopPropagation();
+
+                    document.querySelectorAll(".ui-select.open").forEach((item) => {
+                        if (item !== this.root) {
+                            item.classList.remove("open");
+                        }
+                    });
+
+                    this.root.classList.toggle("open");
+                });
+
+                this.list.addEventListener("click", (e) => {
+                    const li = e.target.closest("li");
+
+                    if (!li || li.classList.contains("disabled")) return;
+
+                    this.button.textContent = li.textContent;
+
+                    this.select.value = li.dataset.value;
+
+                    this.list.querySelectorAll("li").forEach((item) => {
+                        item.classList.remove("active");
+                    });
+
+                    li.classList.add("active");
+
+                    this.root.classList.remove("open");
+
+                    if (this.root.dataset.type === "link" && li.dataset.value) {
+                        window.location.assign(li.dataset.value);
+                        return;
+                    }
+
+                    this.select.dispatchEvent(new Event("change"));
+                });
+            }
+
+            bindMobile() {
+                this.select.style.display = "block";
+                this.select.style.opacity = "0";
+                this.select.style.position = "absolute";
+                this.select.style.inset = "0";
+
+                this.button.style.pointerEvents = "none";
+
+                this.select.addEventListener("change", () => {
+
+                    this.button.textContent =
+                        this.select.selectedOptions[0].textContent;
+
+                    if (this.root.dataset.type === "link" && this.select.value) {
+                        window.location.assign(this.select.value);
+                    }
+
+                });
+            }
+        }
+
+        CustomSelect.init();
+
+        // 2026-09-04: 산업단지현황지도 파일 준비 전까지 다운로드 대신 준비 안내를 표시한다.
+        document.querySelectorAll('[data-map-download-pending]').forEach((link) => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                window.alert('준비중입니다.');
+            });
+        });
+
+        // 셀렉트 외부 클릭시 닫힘
+        document.addEventListener("click", () => {
+            document.querySelectorAll(".ui-select.open").forEach((item) => {
+                item.classList.remove("open");
+            });
+        });
+    };
+
+    customSelect_create();
 })();

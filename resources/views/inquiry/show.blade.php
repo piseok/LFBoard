@@ -5,15 +5,29 @@
         <header class="post-header">
             <h1 class="post-title">{{ $inquiry->title }}</h1>
             <div class="post-meta">
-                <span>{{ $inquiry->name }}</span>
-                <time datetime="{{ $inquiry->created_at->toIso8601String() }}">{{ local_datetime($inquiry->created_at)->format('Y-m-d H:i') }}</time>
                 <span class="badge {{ $inquiry->status === 'done' ? 'badge-notice' : 'badge-secret' }}">
                     {{ __(['pending' => '대기', 'processing' => '처리중', 'done' => '완료'][$inquiry->status] ?? $inquiry->status) }}
                 </span>
+
+                <time datetime="{{ $inquiry->created_at->toIso8601String() }}">
+                    작성일 : 
+                    {{ local_datetime($inquiry->created_at)->format('Y-m-d H:i') }}
+                </time>
             </div>
         </header>
 
-        <div class="post-content">{{ $inquiry->content }}</div>
+        <div class="post-content">
+            <div class="inquiry-show-table">
+                <dl>
+                    <dt>성함</dt> 
+                    <dd>{{ $inquiry->name }}</dd>
+                </dl>
+                <dl>
+                    <dt>문의 내용</dt> 
+                    <dd>{{ $inquiry->content }}</dd>
+                </dl>
+            </div>
+        </div>
 
         @if ($inquiry->file_path)
             <div class="post-files">

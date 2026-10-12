@@ -180,7 +180,7 @@
             </div>
         @endif
 
-        <div class="form-actions">
+        <div class="form-actions write-form-actions">
             <button type="submit" class="btn btn-primary">{{ $post ? __('수정 완료') : __('등록') }}</button>
             @auth
                 <button type="submit" name="save_as_draft" value="1" class="btn">{{ __('임시저장') }}</button>
@@ -194,16 +194,16 @@
     </form>
 
     @if ($post && $post->is_draft)
-        <form method="POST" action="{{ front_route('board.destroy', ['slug' => $board->slug, 'id' => $post->id]) }}" data-confirm="{{ __('임시저장 글이 삭제됩니다. 취소하시겠습니까?') }}" style="margin-top: 12px; display:inline-block;">
+        <form method="POST" action="{{ front_route('board.destroy', ['slug' => $board->slug, 'id' => $post->id]) }}" data-confirm="{{ __('임시저장 글이 삭제됩니다. 취소하시겠습니까?') }}" style="margin-top: 12px; display:inline-block; width: 100%;">
             @csrf
             @method('DELETE')
-            <button type="submit" class="btn">{{ __('취소') }}</button>
+            <button type="submit" class="btn" style="width: 100%;">{{ __('취소') }}</button>
         </form>
     @elseif ($post)
-        <form method="POST" action="{{ front_route('board.destroy', ['slug' => $board->slug, 'id' => $post->id]) }}" data-confirm="{{ __('삭제하시겠습니까?') }}" style="margin-top: 12px;">
+        <form method="POST" action="{{ front_route('board.destroy', ['slug' => $board->slug, 'id' => $post->id]) }}" data-confirm="{{ __('삭제하시겠습니까?') }}" style="margin-top: 12px; width: 100%;">
             @csrf
             @method('DELETE')
-            <button type="submit" class="btn btn-danger">{{ __('글 삭제') }}</button>
+            <button type="submit" class="btn btn-danger" style="width: 100%;">{{ __('글 삭제') }}</button>
         </form>
     @endif
 

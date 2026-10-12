@@ -149,6 +149,12 @@
 .form-group .hint { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px; }
 .form-error { color: var(--color-danger); font-size: 0.82rem; margin-top: 4px; }
 .form-actions { margin-top: 20px; display: flex; gap: 8px; }
+.write-form-actions {
+    justify-content: center;
+    flex-direction: column;
+}
+
+.write-form-actions > * {flex: 1;}
 
 .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
 .alert-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }

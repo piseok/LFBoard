@@ -552,6 +552,21 @@ table.board-list th {
 }
 
 /* 1:1상담 */
+
+.inquiry-show-table {display: grid; gap: 10px;}
+.inquiry-show-table dl { display: flex; gap: 10px;}
+.inquiry-show-table dl dt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    padding: 5px;
+    border: 1px solid #dfdfdf;
+    border-radius: 10px;
+    font-size: 14px;
+}
+.inquiry-show-table dl dd {flex: 1; padding: 5px 0;}
+
 .no_member_text {
     display: flex;
     align-items: center;
@@ -560,9 +575,23 @@ table.board-list th {
     gap: 10px;
 }
 
-.no_member_text .form-actions {
-    width: 100%;
+.no_member_text .txt-box {
+    text-align: center;
+    border: 1px solid #ccc;
+    padding: 20px 15px;
+    border-radius: 10px;
+    color: #5f5f5f;
 }
+
+.no_member_text .form-actions {width: 100%; max-width: 350px;}
+.no_member_text .form-actions a {width: 100%;}
+
+.verfiy-pw-form {
+    width: 100%; max-width: 500px;
+    margin: 100px auto;
+}
+.verfiy-pw-form .sub-header {text-align: center;}
+.verfiy-pw-form .sub-header .post-meta {justify-content: center;}
 
 
 /* 이전글/다음글 — 다음글(더 최신)이 위, 이전글(더 과거)이 아래 순서로 보여준다 */
