@@ -69,13 +69,15 @@ if ! git merge-base --is-ancestor "$last_synced" dev; then
   exit 1
 fi
 
-pick_list="$(git log --reverse --format=%H "${last_synced}..dev")"
+# 2026-10-21: 병합 커밋(협업자 PR 머지 등)은 cherry-pick 이 "-m 없이는 병합 커밋을 고를 수 없다"며 즉시 실패하고(진행 중 cherry-pick 이 없어 --skip 도 실패 → set -e 로 스크립트 중단)
+# 병합이 가져온 변경은 범위 안의 일반 커밋들로 이미 들어 있으므로 --no-merges 로 제외한다.
+pick_list="$(git log --reverse --no-merges --format=%H "${last_synced}..dev")"
 
 if [ -z "$pick_list" ]; then
   echo "dev에 새 커밋이 없습니다 — cherry-pick할 것이 없습니다."
 else
   echo "다음 커밋을 main에 순서대로 cherry-pick합니다:"
-  git log --reverse --oneline "${last_synced}..dev"
+  git log --reverse --no-merges --oneline "${last_synced}..dev"
 
   # main엔 원래부터 없어야 하는 dev 전용 경로(하네스/문서) — cherry-pick 중 이 경로에서만
   # modify/delete 충돌이 나면 "삭제 유지"로 자동 해결한다. 그 외 경로 충돌은 사람이 봐야 한다.
