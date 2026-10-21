@@ -126,6 +126,16 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn () => '<link rel="stylesheet" href="'.e(asset('css/admin-custom.css')).'">',
+            )
+            // AI 비서 위젯 전용 스타일(토큰 색 + 라이트/다크 두 벌)과 "AI 가 채운 칸 표시" 스크립트.
+            // 예전에는 위젯 blade 안 <style> 에 라이트 색만 하드코딩돼 다크 모드에서 글자가 안 보였다.
+            // 파일 수정 시각을 ?v= 로 붙여 브라우저 캐시가 옛 파일을 쥐고 있지 않게 한다.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn () => auth()->check()
+                    ? '<link rel="stylesheet" href="'.e(asset('css/ai-chat.css').'?v='.@filemtime(public_path('css/ai-chat.css'))).'">'
+                        .'<script defer src="'.e(asset('js/ai-chat.js').'?v='.@filemtime(public_path('js/ai-chat.js'))).'"></script>'
+                    : '',
             );
     }
 }

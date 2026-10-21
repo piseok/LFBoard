@@ -59,3 +59,10 @@
 ## 5. 진행 로그
 
 - 2026-10-21 단계 0: SCOPE·java-cms SCOPE·PROJECT.md·CLAUDE.md·HANDOFF·PROJECT_STATUS·AI 코드 전체 읽음. 브랜치 `feat/ai-assistant-v2` 생성. 접점 전수표·설계 결정 작성.
+- 2026-10-21 단계 1(서버 기반, WIP 커밋 `bbd8c5e7`): 제공자 중립 인터페이스(`chatWithTools`·`supportsTools`)·Gemini/OpenAI 도구 호출 파싱·`FakeChatProvider`·`AiChatUsage`/`AiChatProposal` 모델·마이그레이션 2개(`ai_chat_usage`·`ai_chat_proposals`)·`AiText`. 기존 AI 시험 47건 통과 유지.
+- 2026-10-21 **작업 폴더 격리(메인 긴급 지시)**: 작업 트리 `cms-admin` 이 사용자 앱(8090)과 같아 미완성 코드가 `/admin` 500 을 냈다. → WIP 커밋 후 원래 트리를 `dev` 로 되돌리고(사용자 슬라이더 WIP·HANDOFF 수정은 그대로), **별도 worktree `C:\Users\USER\PhpstormProjects\cms-admin-ai`(브랜치 `feat/ai-assistant-v2`)** 에서만 작업. 별도 Docker 스택 `docker compose -p cmsadminai`(앱 8095·Vite 5183·MySQL 33081·Mailpit 2535/8035, 볼륨 `cmsadminai_sail-mysql`, `vendor` 는 시험 볼륨에서 `docker cp`). 시험은 기존 방식(볼륨 `cmsadmin_v2` 복사). worktree 제거는 메인이 한다.
+
+## 6. 사용자 테스트로 확인된 결함 2건(2026-10-21, 로컬 위젯)
+
+1. **다크 모드에서 위젯 select·textarea 글자가 안 보임** - (원인/수정/회귀 시험: 구현하면서 채운다)
+2. **글쓰기 화면에서 "필드에 채우기"가 동작하지 않음** - (재현/원인/수정/회귀 시험: 구현하면서 채운다)

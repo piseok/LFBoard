@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AdminAuditLog;
+use App\Models\AiChatProposal;
 use App\Models\Banner;
 use App\Models\BannedWord;
 use App\Models\Board;
@@ -123,6 +124,27 @@ class AdminAuditLogService
                 'provider' => $provider,
                 'type' => $type,
                 'success' => $success,
+            ],
+        ]);
+    }
+
+    // AI 비서 제안(행동 카드)으로 채운 초안을 관리자가 작성 화면에서 실제로 저장했을 때 남긴다. 저장 자체의 생성 기록은
+    // 기존 감사 훅이 이미 남기므로, 여기서는 "어떤 AI 제안에서 왔는지"(제안 id·종류·만들어진 레코드)만 연결해 둔다.
+    // 라벨에 제안 제목을 쓰지 않는 이유: 모델이 만든 문자열이라 개행·긴 글이 들어올 수 있다 - 종류와 id 만 쓴다.
+    public function recordAiProposalUsed(User $admin, AiChatProposal $proposal, Model $record): void
+    {
+        AdminAuditLog::create([
+            'admin_user_id' => $admin->id,
+            'admin_name' => $admin->name,
+            'action' => 'ai_chat',
+            'auditable_type' => get_class($record),
+            'auditable_id' => $record->getKey(),
+            'auditable_label' => "AI 제안 #{$proposal->id} ({$proposal->kind}) 저장",
+            'changes' => [
+                'type' => 'proposal_used',
+                'proposal_id' => $proposal->id,
+                'kind' => $proposal->kind,
+                'success' => true,
             ],
         ]);
     }

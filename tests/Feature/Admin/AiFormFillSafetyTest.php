@@ -44,11 +44,53 @@ class AiFormFillSafetyTest extends TestCase
     {
         $this->actingAs($this->admin());
 
+        // 파일 업로드 칸은 Filament 가 기존 파일을 [경로] 배열 상태로 들고 있다(2026-10-21: 문자열이 아니라 같은 모양으로 채운다).
         Livewire::test(CreatePopup::class)
             ->call('fillAiGeneratedField', 'image_path', 'uploads/ai_generated/2026/07/fake.png')
-            ->assertSet('data.image_path', 'uploads/ai_generated/2026/07/fake.png');
+            ->assertSet('data.image_path', ['uploads/ai_generated/2026/07/fake.png']);
 
         $this->assertDatabaseCount('popups', 0);
+    }
+
+    // 이벤트는 브라우저에서 임의로 보낼 수도 있으므로 서버도 허용 필드 표(AiFormFillSchema)로 다시 검증한다.
+    public function test_fill_ignores_fields_outside_the_allow_list_and_image_paths_outside_the_ai_folder(): void
+    {
+        $this->actingAs($this->admin());
+
+        Livewire::test(CreatePopup::class)
+            ->call('fillAiGeneratedField', 'is_active', '1')
+            ->call('fillAiGeneratedField', 'sort_order', '999')
+            ->call('fillAiGeneratedField', 'image_path', '../../.env')
+            ->call('fillAiGeneratedField', 'image_path', 'uploads/images/other.png')
+            ->assertSet('data.sort_order', 0)
+            ->assertSet('data.is_active', true)
+            ->assertSet('data.image_path', []);
+    }
+
+    // AI 에게 쓰기 권한을 주지 않는다는 설계의 핵심을 코드로 고정한다 - 채우기에 관여하는 파일(트레이트·위젯·스키마·스크립트)에는
+    // 저장하는 호출이 없어야 한다. 이 시험이 깨지면 AI 가 사람 개입 없이 콘텐츠를 저장할 수 있게 된 것이다.
+    public function test_fill_related_sources_contain_no_persistence_calls(): void
+    {
+        $files = [
+            'app/Filament/Concerns/HasAiFormFill.php',
+            'app/Services/Ai/AiFormFillSchema.php',
+            'public/js/ai-chat.js',
+        ];
+        $forbidden = ['->save(', '->create(', '::create(', '->update(', '->delete(', 'DB::', 'fetch(', 'XMLHttpRequest', '.submit('];
+
+        foreach ($files as $file) {
+            $source = file_get_contents(base_path($file));
+
+            foreach ($forbidden as $needle) {
+                $this->assertStringNotContainsString($needle, $source, "{$file} 에 '{$needle}' 호출이 있습니다 - AI 채우기 경로는 저장하면 안 됩니다.");
+            }
+        }
+
+        // 위젯: 채우기/이미지 사용 액션 안에는 저장이 없다(이미지 생성 서비스 호출만 별도 액션에 있다).
+        $widget = file_get_contents(base_path('app/Livewire/AiChatWidget.php'));
+        foreach (['Post::create', 'Popup::create', 'Page::create', 'Banner::create', 'Board::create', '->forceFill('] as $needle) {
+            $this->assertStringNotContainsString($needle, $widget);
+        }
     }
 
     public function test_filling_an_inquiry_reply_does_not_persist_until_explicit_save(): void
