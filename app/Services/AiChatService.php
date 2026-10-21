@@ -84,7 +84,10 @@ class AiChatService
 
         try {
             $tempPath = $provider->generateImage($prompt);
-            $storedPath = $this->uploadService->uploadFromPath($tempPath, 'ai_generated', 'png');
+            // 확장자는 제공자가 돌려준 임시 파일의 확장자를 따른다(OpenAI 는 png, Gemini 는 응답 MIME 에 따라 jpg 등).
+            // 그 밖의 값이면 png 로 두고, 허용 목록 검사는 UploadService 가 한다.
+            $extension = strtolower(pathinfo($tempPath, PATHINFO_EXTENSION)) ?: 'png';
+            $storedPath = $this->uploadService->uploadFromPath($tempPath, 'ai_generated', $extension);
             @unlink($tempPath);
             $content = null;
             $success = true;

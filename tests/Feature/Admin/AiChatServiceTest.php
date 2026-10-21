@@ -134,6 +134,74 @@ class AiChatServiceTest extends TestCase
         Storage::disk('uploads')->assertMissing($storedPath);
     }
 
+    // 2026-10-21: 종료된 모델(gemini-2.0-flash·imagen-3.0-generate-002)을 gemini-3.8-flash·gemini-nano-banana-2.1 로 교체한
+    // 것의 회귀 시험. 실제 Google API 는 부르지 않는다(유료 키) — 요청 모양(모델 주소·헤더 키·본문)과 응답 해석만 검증.
+    public function test_gemini_chat_uses_current_model_and_sends_key_in_header_not_url(): void
+    {
+        app(SiteSettingService::class)->set('ai_gemini_api_key', 'gm-test-key', 'ai');
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => '안녕하세요, 제미나이입니다.']]]]],
+            ], 200),
+        ]);
+
+        $message = app(AiChatService::class)->sendMessage($this->admin(), null, 'gemini', '안녕');
+
+        $this->assertSame('안녕하세요, 제미나이입니다.', $message->content);
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'
+                && $request->hasHeader('x-goog-api-key', 'gm-test-key')
+                && ! str_contains($request->url(), 'key=');
+        });
+    }
+
+    public function test_gemini_image_uses_generate_content_and_keeps_the_response_mime_extension(): void
+    {
+        Storage::fake('uploads');
+        app(SiteSettingService::class)->set('ai_gemini_api_key', 'gm-test-key', 'ai');
+
+        $jpegBase64 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                // 텍스트 파트가 이미지 파트 앞에 와도 이미지를 찾아야 한다.
+                'candidates' => [['content' => ['parts' => [
+                    ['text' => '만들었습니다.'],
+                    ['inlineData' => ['mimeType' => 'image/jpeg', 'data' => $jpegBase64]],
+                ]]]],
+            ], 200),
+        ]);
+
+        $message = app(AiChatService::class)->generateImage($this->admin(), null, 'gemini', '구름 아이콘');
+
+        $this->assertNotNull($message->image_path);
+        $this->assertStringEndsWith('.jpg', $message->image_path);
+        Storage::disk('uploads')->assertExists($message->image_path);
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent'
+                && $request->hasHeader('x-goog-api-key', 'gm-test-key')
+                && in_array('IMAGE', $request['generationConfig']['responseModalities'] ?? [], true);
+        });
+    }
+
+    public function test_gemini_image_without_inline_data_fails_gracefully(): void
+    {
+        Storage::fake('uploads');
+        app(SiteSettingService::class)->set('ai_gemini_api_key', 'gm-test-key', 'ai');
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => '이미지를 만들 수 없습니다.']]]]],
+            ], 200),
+        ]);
+
+        $message = app(AiChatService::class)->generateImage($this->admin(), null, 'gemini', '구름 아이콘');
+
+        $this->assertNull($message->image_path);
+        $this->assertNotEmpty($message->content);
+    }
+
     private function createTempPng(): string
     {
         $tmp = tempnam(sys_get_temp_dir(), 'ai_img_test_').'.png';
