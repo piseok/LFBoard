@@ -118,3 +118,10 @@
 **차단 호출 한도 미소모 반영 위치·시험**: 정의 `app/Services/Ai/AiBlockedException.php`; Gemini 이미지 판정 `app/Services/Ai/GeminiProvider.php` 180~196행(HTTP 200+이미지 없음+finishReason 이 비어 있지도 STOP 도 아님, 또는 promptFeedback.blockReason → 차단; 5xx·타임아웃·STOP 인데 이미지 없음은 소모), Gemini 채팅 143행 부근·OpenAI `content_filter`/`content_policy_violation`(`OpenAiProvider.php`), 한도 되돌림 `AiChatService.php` 115행(채팅)·162행(이미지 메시지)·215행(카드 이미지)→`AiUsageReservation::refund()`, 기준 주석 `AiUsageService.php` 상단·`GeminiProvider.php` 180행 부근·`AiChatService.php` 일반 실패 catch. 시험 `tests/Feature/Admin/AiProviderBlockedTest.php`(빈 content+IMAGE_RECITATION → 사용 0, 임의 non-STOP 사유 차단, 5xx·503·타임아웃·STOP 이미지 없음은 소모, 카드 이미지 차단 시 제안 유지, 감사 로그 `blocked_reason`) — 통과 확인됨.
 
 **8095 스택(`cmsadminai`) 상태**: 실행 중(앱 `http://localhost:8095`, MySQL 33081, Mailpit 8035/2535). 시더 기본 관리자로 로그인 가능(AdminUserSeeder, 비밀번호는 시더 참고). `.env` 에 `SESSION_COOKIE=cmsadminai_session`(8090 세션과 분리). 컨테이너 `cmsadminai-laravel.test-1` 이 worktree 를 바인드 마운트(vendor 는 볼륨 `cmsadminai_vendor`). 개발 DB 에 시험 데이터(제안 3건·대화 4건·사용 기록)와 설정 `ai_chat_daily_limit_per_admin=30` 이 남아 있다. `docker-compose.override.yml` 은 **커밋하지 않은 로컬 전용 파일**(vendor 볼륨 연결) - worktree 와 함께 지울 것. 정리: `docker compose -p cmsadminai down -v`, `docker volume rm cmsadminai_vendor cmsadmin_v2 cmsadmin_old`, `git worktree remove ..\cms-admin-ai`(메인이 한다). 참고: 내가 먼저 같은 쿠키 이름으로 8095 에 로그인하는 바람에 한동안 8090 의 로그인 세션 쿠키를 덮어썼을 수 있다(8090 에서 다시 로그인하면 됨, 이후 분리).
+
+## 8. 리뷰 반영 완료 (2026-10-21, 커밋 `94c1ddf7`) — §7 의 "남은 것" 갱신
+
+- §7 의 1(`AI_V2_REPORT.md` 작성)·2(Critic 리뷰 반영)는 끝났다. 항목별 확인 결과·수정·보류 이유는 `AI_V2_REPORT.md` §3, 원문은 `AI_V2_REVIEW_FINDINGS.md`(M1·M2·M4·L1~L8 처리, **M3 환불 상한은 사용자 결정으로 안 함**, L9·L10 보류).
+- 새 설정: `.env` `AI_FAKE_PROVIDER=true`(config `services.ai.fake_provider`) — 개발용 가짜 제공자는 `APP_ENV=local` **그리고** 이 플래그일 때만 존재한다. 8095 worktree `.env` 에 추가해 둠(커밋 안 함).
+- 정책 차단 환불은 `GeminiProvider::POLICY_REASONS` 명시 8개만(환불 횟수 상한 없음 - 사용자 결정). 시험 숫자: 전체 `OK (404 tests, 1968 assertions)`.
+- 시험 실행: scratchpad 스크립트가 없어졌으면 §SCOPE 0 의 명령 패턴(볼륨 `cmsadmin_v2` 에 `tar` 로 변경분 복사 후 `php -d memory_limit=2G vendor/bin/phpunit`). Pint 는 같은 볼륨의 `vendor/bin/pint` 를 worktree 를 마운트해 실행.
