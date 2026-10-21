@@ -157,6 +157,10 @@ echo "== main 전용 정리: CI 워크플로우 제거, .gitignore 최소화 =="
 # 이 경우 실패했었음 — 처음 정리할 때는 통과했지만 두 번째 실행부터 이 문제가 드러났다).
 git rm -rf --ignore-unmatch --quiet .github >/dev/null 2>&1 || true
 rm -rf .github
+# 2026-10-21: dev 전용 경로(.claude 문서·하네스 등)가 '섞인 커밋'(코드+문서)으로 cherry-pick 돼 main 에 들어오는 일이 있었다
+# (충돌 자동 해결은 dev 전용 경로만 바뀐 경우에만 동작). main 은 배포 스냅샷이라 이 경로가 필요 없으므로 매번 제거한다.
+git rm -rf --ignore-unmatch --quiet .claude CLAUDE.md PROJECT.md claude_code_prompts.md >/dev/null 2>&1 || true
+rm -rf CLAUDE.md PROJECT.md claude_code_prompts.md
 cat > .gitignore <<'GITIGNORE_EOF'
 .env
 .env.backup
@@ -176,7 +180,7 @@ cat > .gitignore <<'GITIGNORE_EOF'
 /*-deploy.zip
 GITIGNORE_EOF
 git add .gitignore
-if git diff --cached --quiet -- .github .gitignore; then
+if git diff --cached --quiet -- .github .claude CLAUDE.md PROJECT.md claude_code_prompts.md .gitignore; then
   echo "정리할 내용이 없습니다(이미 정리된 상태)."
 else
   git commit -m "Remove CI workflow and use minimal .gitignore on main"
