@@ -8,10 +8,14 @@ use RuntimeException;
 
 class GeminiProvider implements AiProviderContract
 {
+    use DelegatesPlainChat;
+
     // 2026-10-21: 예전 모델이 Google 에서 종료돼 교체했다(공식 deprecations 페이지, 2026-10-20 갱신) -
     // gemini-2.0-flash(2026-06-01 종료)·imagen-3.0-generate-002(2025-11-10 종료). 이미지는 Imagen 의 :predict 가
     // 아니라 Gemini 이미지 모델의 generateContent(responseModalities)로 만든다. java-cms 의 GeminiProvider 와
     // 같은 모델·같은 호출 형식(실제 키로 채팅 텍스트·이미지 수신 확인됨).
+    // 도구 호출(functionDeclarations)은 이 모델로 실측된 적이 없다 - 안 되면 사이트 설정 "도구 호출 사용"을
+    // 꺼서 일반 대화로 내려갈 수 있다(AiChatService::toolsEnabled).
     private const CHAT_MODEL = 'gemini-3.8-flash';
 
     private const IMAGE_MODEL = 'gemini-nano-banana-2.1';
@@ -24,6 +28,11 @@ class GeminiProvider implements AiProviderContract
         'image/jpeg' => 'jpg',
         'image/webp' => 'webp',
         'image/gif' => 'gif',
+    ];
+
+    // 후보가 이 사유로 끝나면 재시도하지 않고 오류로 처리한다(재시도는 곧 비용).
+    private const BLOCKING_FINISH_REASONS = [
+        'SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'MALFORMED_FUNCTION_CALL', 'OTHER',
     ];
 
     public function __construct(private readonly SiteSettingService $siteSettings) {}
@@ -48,34 +57,88 @@ class GeminiProvider implements AiProviderContract
         return true;
     }
 
-    public function chat(array $history): string
+    public function supportsTools(): bool
+    {
+        return true;
+    }
+
+    public function chatWithTools(string $systemInstruction, array $history, array $tools = []): AiChatResult
     {
         $apiKey = (string) $this->siteSettings->get('ai_gemini_api_key');
 
+        $body = [
+            // Gemini는 'assistant'가 아니라 'model' 롤을 사용한다.
+            'contents' => array_map(
+                fn (array $m) => [
+                    'role' => $m['role'] === 'assistant' ? 'model' : 'user',
+                    'parts' => [['text' => (string) $m['content']]],
+                ],
+                $history
+            ),
+        ];
+
+        if ($systemInstruction !== '') {
+            $body['systemInstruction'] = ['parts' => [['text' => $systemInstruction]]];
+        }
+
+        if ($tools !== []) {
+            $body['tools'] = [['functionDeclarations' => array_map(
+                fn (AiToolDeclaration $tool) => [
+                    'name' => $tool->name,
+                    'description' => $tool->description,
+                    'parameters' => $tool->parameters,
+                ],
+                array_values($tools)
+            )]];
+            $body['toolConfig'] = ['functionCallingConfig' => ['mode' => 'AUTO']];
+        }
+
         // API 키는 URL 쿼리(?key=)가 아니라 x-goog-api-key 헤더로 보낸다 — 쿼리에 넣으면 프록시·접근 로그·예외 메시지에 키가 남는다.
         $response = Http::withHeaders(['x-goog-api-key' => $apiKey])->timeout(30)
-            ->post(self::ENDPOINT.self::CHAT_MODEL.':generateContent', [
-                // Gemini는 'assistant'가 아니라 'model' 롤을 사용한다.
-                'contents' => array_map(
-                    fn (array $m) => [
-                        'role' => $m['role'] === 'assistant' ? 'model' : 'user',
-                        'parts' => [['text' => (string) $m['content']]],
-                    ],
-                    $history
-                ),
-            ]);
+            ->post(self::ENDPOINT.self::CHAT_MODEL.':generateContent', $body);
 
         if (! $response->successful()) {
             throw new RuntimeException('Gemini 채팅 요청이 실패했습니다.');
         }
 
-        $text = $response->json('candidates.0.content.parts.0.text');
-
-        if (! is_string($text) || $text === '') {
-            throw new RuntimeException('Gemini 응답을 해석할 수 없습니다.');
+        // 프롬프트 자체가 차단되면 candidates 가 없다 - 재시도 없이 오류.
+        if (filled($response->json('promptFeedback.blockReason'))) {
+            throw new RuntimeException('Gemini 가 요청을 차단했습니다.');
         }
 
-        return $text;
+        $finishReason = (string) $response->json('candidates.0.finishReason', '');
+        $text = [];
+        $calls = [];
+
+        // 모든 파트에서 텍스트와 함수 호출을 모은다(한 응답에 텍스트 파트와 functionCall 파트가 섞여 올 수 있다).
+        foreach ((array) $response->json('candidates.0.content.parts', []) as $part) {
+            if (! is_array($part)) {
+                continue;
+            }
+
+            if (is_array($part['functionCall'] ?? null) && is_string($part['functionCall']['name'] ?? null)) {
+                $args = $part['functionCall']['args'] ?? [];
+                $calls[] = new AiToolCall($part['functionCall']['name'], is_array($args) ? $args : []);
+
+                continue;
+            }
+
+            // thought 파트(모델의 사고 요약)는 사용자에게 보이는 답이 아니다.
+            if (is_string($part['text'] ?? null) && ($part['thought'] ?? false) !== true) {
+                $text[] = $part['text'];
+            }
+        }
+
+        $joined = trim(implode("\n", $text));
+
+        if ($joined === '' && $calls === []) {
+            // 빈 후보 / 안전 차단 / MALFORMED_FUNCTION_CALL - 재시도하지 않는다.
+            throw new RuntimeException(in_array($finishReason, self::BLOCKING_FINISH_REASONS, true)
+                ? 'Gemini 응답이 차단되었거나 도구 호출 형식이 잘못되었습니다.'
+                : 'Gemini 응답을 해석할 수 없습니다.');
+        }
+
+        return new AiChatResult($joined, $calls);
     }
 
     public function generateImage(string $prompt): string

@@ -8,6 +8,10 @@ use RuntimeException;
 
 class OpenAiProvider implements AiProviderContract
 {
+    use DelegatesPlainChat;
+
+    // 이 모델 이름들의 노후 여부는 아직 확인하지 못했다(Gemini 는 2026-10-21 에 종료 모델을 교체함) -
+    // 실제 키를 넣고 확인할 때 같이 점검할 것(HANDOFF "아직 안 한 것").
     private const CHAT_MODEL = 'gpt-4o-mini';
 
     private const IMAGE_MODEL = 'gpt-image-1';
@@ -34,29 +38,80 @@ class OpenAiProvider implements AiProviderContract
         return true;
     }
 
-    public function chat(array $history): string
+    public function supportsTools(): bool
     {
+        return true;
+    }
+
+    public function chatWithTools(string $systemInstruction, array $history, array $tools = []): AiChatResult
+    {
+        $messages = [];
+
+        if ($systemInstruction !== '') {
+            $messages[] = ['role' => 'system', 'content' => $systemInstruction];
+        }
+
+        foreach ($history as $m) {
+            $messages[] = ['role' => $m['role'], 'content' => (string) $m['content']];
+        }
+
+        $body = ['model' => self::CHAT_MODEL, 'messages' => $messages];
+
+        if ($tools !== []) {
+            $body['tools'] = array_map(
+                fn (AiToolDeclaration $tool) => [
+                    'type' => 'function',
+                    'function' => [
+                        'name' => $tool->name,
+                        'description' => $tool->description,
+                        'parameters' => $tool->parameters,
+                    ],
+                ],
+                array_values($tools)
+            );
+            $body['tool_choice'] = 'auto';
+            // 한 번에 함수 하나만 - 병렬 호출을 끄면 응답이 단순해지고 카드 폭주가 줄어든다(OpenAI 는 tools 가 있을 때만 허용).
+            $body['parallel_tool_calls'] = false;
+        }
+
         $response = Http::withToken((string) $this->siteSettings->get('ai_openai_api_key'))
             ->timeout(30)
-            ->post('https://api.openai.com/v1/chat/completions', [
-                'model' => self::CHAT_MODEL,
-                'messages' => array_map(
-                    fn (array $m) => ['role' => $m['role'], 'content' => (string) $m['content']],
-                    $history
-                ),
-            ]);
+            ->post('https://api.openai.com/v1/chat/completions', $body);
 
         if (! $response->successful()) {
             throw new RuntimeException('OpenAI 채팅 요청이 실패했습니다.');
         }
 
+        $finishReason = (string) $response->json('choices.0.finish_reason', '');
         $content = $response->json('choices.0.message.content');
+        $calls = [];
 
-        if (! is_string($content) || $content === '') {
+        foreach ((array) $response->json('choices.0.message.tool_calls', []) as $call) {
+            $name = $call['function']['name'] ?? null;
+
+            if (! is_string($name) || $name === '') {
+                continue;
+            }
+
+            // arguments 는 객체가 아니라 JSON "문자열"이다 - 파싱에 실패하거나 응답이 길이 제한으로 잘렸으면
+            // 재시도 없이 오류(재시도는 곧 비용).
+            $arguments = $call['function']['arguments'] ?? '{}';
+            $args = is_string($arguments) ? json_decode($arguments === '' ? '{}' : $arguments, true) : null;
+
+            if ($finishReason === 'length' || ! is_array($args)) {
+                throw new RuntimeException('OpenAI 도구 호출 인자를 해석할 수 없습니다.');
+            }
+
+            $calls[] = new AiToolCall($name, $args);
+        }
+
+        $text = is_string($content) ? trim($content) : '';
+
+        if ($text === '' && $calls === []) {
             throw new RuntimeException('OpenAI 응답을 해석할 수 없습니다.');
         }
 
-        return $content;
+        return new AiChatResult($text, $calls);
     }
 
     public function generateImage(string $prompt): string
