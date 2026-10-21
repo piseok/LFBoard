@@ -108,6 +108,11 @@ class OpenAiProvider implements AiProviderContract
         $text = is_string($content) ? trim($content) : '';
 
         if ($text === '' && $calls === []) {
+            // 콘텐츠 필터에 걸린 응답은 정책상 차단 안내로(재시도 없음, 한도 미소모).
+            if ($finishReason === 'content_filter') {
+                throw AiBlockedException::forChat('CONTENT_FILTER');
+            }
+
             throw new RuntimeException('OpenAI 응답을 해석할 수 없습니다.');
         }
 
@@ -126,6 +131,13 @@ class OpenAiProvider implements AiProviderContract
             ]);
 
         if (! $response->successful()) {
+            // 정책 위반(400 content_policy_violation / moderation_blocked)은 이유별 안내로 - 표현을 바꾸면 해결된다(한도 미소모).
+            $errorCode = strtolower((string) $response->json('error.code', ''));
+
+            if (in_array($errorCode, ['content_policy_violation', 'moderation_blocked'], true)) {
+                throw AiBlockedException::forImage($errorCode);
+            }
+
             throw new RuntimeException('OpenAI 이미지 생성 요청이 실패했습니다.');
         }
 

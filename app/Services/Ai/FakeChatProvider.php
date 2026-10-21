@@ -9,6 +9,7 @@ use RuntimeException;
 // 목록에 넣는다(운영/시험에서는 나오지 않음). 응답은 결정적이다(같은 입력 → 같은 출력):
 //
 //   메시지에 "오류"      → 제공자 오류 흉내(예외)
+//   "차단"               → 정책상 차단 흉내(채팅 SAFETY, 이미지 프롬프트에 "차단"이 있으면 IMAGE_RECITATION) - 이유별 안내·한도 미소모 확인용
 //   "마크다운"/"서식"    → 마크다운 렌더링 시험용 답(굵게·목록·코드·링크·이미지·스크립트 태그 포함)
 //   "팝업"               → propose_popup 호출 + 짧은 안내 문장(이미지 프롬프트 포함 → "이미지 만들고 열기" 버튼)
 //   "게시글"/"글 써"      → 본문 예시 답 + propose_post 호출(채우기 버튼 시험용 본문 포함)
@@ -63,6 +64,10 @@ class FakeChatProvider implements AiProviderContract
 
         if (str_contains($last, '오류')) {
             throw new RuntimeException('개발용 가짜 제공자: 오류 흉내');
+        }
+
+        if (str_contains($last, '차단')) {
+            throw AiBlockedException::forChat('SAFETY');
         }
 
         if (str_contains($last, '마크다운') || str_contains($last, '서식')) {
@@ -159,6 +164,10 @@ class FakeChatProvider implements AiProviderContract
     // 단색 PNG - 프롬프트 글자 합으로 색을 정해 같은 프롬프트는 같은 색이다. GD 가 없으면 1x1 PNG.
     public function generateImage(string $prompt): string
     {
+        if (str_contains($prompt, '차단')) {
+            throw AiBlockedException::forImage('IMAGE_RECITATION');
+        }
+
         $path = tempnam(sys_get_temp_dir(), 'ai_img_').'.png';
 
         if (function_exists('imagecreatetruecolor') && function_exists('imagepng')) {

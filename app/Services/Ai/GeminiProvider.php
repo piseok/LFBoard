@@ -35,6 +35,13 @@ class GeminiProvider implements AiProviderContract
         'SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'MALFORMED_FUNCTION_CALL', 'OTHER',
     ];
 
+    // "정책상 차단" - 결과가 없고 관리자가 표현을 바꾸면 해결되는 사유(IMAGE_* 는 이미지 모델의 사유 전부).
+    // 이 경우 AiBlockedException 으로 이유별 안내를 만들고 일일 한도를 소모하지 않는다(2026-10-21 실측: 단순한 아이콘 프롬프트가
+    // HTTP 200 + 빈 content + finishReason IMAGE_RECITATION 으로 와서 "응답을 해석할 수 없습니다"라는 불친절한 오류가 됐다).
+    private const POLICY_FINISH_REASONS = [
+        'SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'NO_IMAGE',
+    ];
+
     public function __construct(private readonly SiteSettingService $siteSettings) {}
 
     public function key(): string
@@ -101,9 +108,9 @@ class GeminiProvider implements AiProviderContract
             throw new RuntimeException('Gemini 채팅 요청이 실패했습니다.');
         }
 
-        // 프롬프트 자체가 차단되면 candidates 가 없다 - 재시도 없이 오류.
+        // 프롬프트 자체가 차단되면 candidates 가 없다 - 재시도 없이 정책 차단 안내.
         if (filled($response->json('promptFeedback.blockReason'))) {
-            throw new RuntimeException('Gemini 가 요청을 차단했습니다.');
+            throw AiBlockedException::forChat((string) $response->json('promptFeedback.blockReason'));
         }
 
         $finishReason = (string) $response->json('candidates.0.finishReason', '');
@@ -132,7 +139,11 @@ class GeminiProvider implements AiProviderContract
         $joined = trim(implode("\n", $text));
 
         if ($joined === '' && $calls === []) {
-            // 빈 후보 / 안전 차단 / MALFORMED_FUNCTION_CALL - 재시도하지 않는다.
+            // 정책상 차단(안전·저작권 유사 등)은 이유별 안내로, 빈 후보 / MALFORMED_FUNCTION_CALL 은 일반 오류로 - 재시도하지 않는다.
+            if (in_array($finishReason, self::POLICY_FINISH_REASONS, true)) {
+                throw AiBlockedException::forChat($finishReason);
+            }
+
             throw new RuntimeException(in_array($finishReason, self::BLOCKING_FINISH_REASONS, true)
                 ? 'Gemini 응답이 차단되었거나 도구 호출 형식이 잘못되었습니다.'
                 : 'Gemini 응답을 해석할 수 없습니다.');
@@ -167,6 +178,19 @@ class GeminiProvider implements AiProviderContract
         $bytes = $inline === null ? false : base64_decode($inline['data'], true);
 
         if ($bytes === false || $bytes === '') {
+            // 이미지가 없을 때: 프롬프트 차단 또는 STOP 이 아닌 정책 사유(IMAGE_RECITATION·IMAGE_SAFETY·SAFETY 등)면 이유별 안내(한도 미소모),
+            // 그 밖이면 일반 오류. finishMessage·원문 응답은 노출하지 않는다(사유 코드만).
+            $finishReason = (string) $response->json('candidates.0.finishReason', '');
+
+            if (filled($response->json('promptFeedback.blockReason'))) {
+                throw AiBlockedException::forImage((string) $response->json('promptFeedback.blockReason'));
+            }
+
+            if ($finishReason !== '' && $finishReason !== 'STOP'
+                && (in_array($finishReason, self::POLICY_FINISH_REASONS, true) || str_starts_with($finishReason, 'IMAGE_'))) {
+                throw AiBlockedException::forImage($finishReason);
+            }
+
             throw new RuntimeException('Gemini 이미지 응답을 해석할 수 없습니다.');
         }
 

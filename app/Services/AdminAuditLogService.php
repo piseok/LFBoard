@@ -111,8 +111,19 @@ class AdminAuditLogService
     }
 
     // AI 비서(채팅/이미지 생성) 사용 내역도 같은 감사로그 테이블에 action='ai_chat'으로 남긴다.
-    public function recordAiUsage(User $admin, string $provider, string $type, bool $success): void
+    public function recordAiUsage(User $admin, string $provider, string $type, bool $success, ?string $blockedReason = null): void
     {
+        $changes = [
+            'provider' => $provider,
+            'type' => $type,
+            'success' => $success,
+        ];
+
+        // 제공자가 정책상 결과를 만들지 않은 경우(예: IMAGE_RECITATION) 사유 코드만 남긴다 - 원문 응답은 남기지 않는다.
+        if ($blockedReason !== null) {
+            $changes['blocked_reason'] = $blockedReason;
+        }
+
         AdminAuditLog::create([
             'admin_user_id' => $admin->id,
             'admin_name' => $admin->name,
@@ -120,11 +131,7 @@ class AdminAuditLogService
             'auditable_type' => User::class,
             'auditable_id' => $admin->id,
             'auditable_label' => "{$provider} ({$type})",
-            'changes' => [
-                'provider' => $provider,
-                'type' => $type,
-                'success' => $success,
-            ],
+            'changes' => $changes,
         ]);
     }
 

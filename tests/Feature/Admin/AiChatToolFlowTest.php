@@ -352,6 +352,17 @@ class AiChatToolFlowTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_message_timestamps_use_the_app_timezone_not_the_database_default(): void
+    {
+        \Illuminate\Support\Carbon::setTestNow(\Illuminate\Support\Carbon::create(2026, 10, 21, 14, 3, 0, 'Asia/Seoul'));
+        $admin = $this->admin();
+        $conversation = AiChatConversation::create(['user_id' => $admin->id, 'provider' => 'gemini', 'title' => '시각']);
+
+        $message = AiChatMessage::create(['conversation_id' => $conversation->id, 'role' => 'user', 'content' => '안녕']);
+
+        $this->assertSame('2026-10-21 14:03', $message->fresh()->created_at->format('Y-m-d H:i'));
+    }
+
     public function test_fake_provider_is_refused_outside_local(): void
     {
         $this->expectException(\InvalidArgumentException::class);

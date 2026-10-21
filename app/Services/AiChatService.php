@@ -6,6 +6,7 @@ use App\Models\AiChatConversation;
 use App\Models\AiChatMessage;
 use App\Models\AiChatProposal;
 use App\Models\User;
+use App\Services\Ai\AiBlockedException;
 use App\Services\Ai\AiProposalService;
 use App\Services\Ai\AiProviderContract;
 use App\Services\Ai\AiSystemPromptBuilder;
@@ -95,6 +96,7 @@ class AiChatService
 
             $toolsOn = $this->toolsEnabled($provider);
             $cards = [];
+            $blockedCode = null;
 
             try {
                 $result = $provider->chatWithTools(
@@ -105,8 +107,14 @@ class AiChatService
                 $reply = trim($result->text);
                 $cards = $toolsOn ? $this->proposals->normalize($admin, $result->toolCalls) : [];
                 $success = true;
+            } catch (AiBlockedException $e) {
+                // 정책상 차단(안전·저작권 유사 등) - 이유별 안내를 그대로 보여 주고 일일 한도는 소모하지 않는다(재시도 없음).
+                $reply = $e->getMessage();
+                $success = false;
+                $blockedCode = $e->reasonCode;
+                $reservation->refund();
             } catch (Throwable) {
-                // 빈 후보·안전 차단·잘못된 도구 인자·HTTP 오류 모두 재시도 없이 일반 오류 문구(재시도는 곧 비용).
+                // 빈 후보·잘못된 도구 인자·HTTP 오류 모두 재시도 없이 일반 오류 문구(재시도는 곧 비용).
                 $reply = __('AI 응답을 받아오지 못했습니다. 잠시 후 다시 시도해주세요.');
                 $success = false;
             }
@@ -115,7 +123,7 @@ class AiChatService
                 $reply = $this->synthesizeReply($cards);
             }
 
-            $this->auditLog->recordAiUsage($admin, $providerKey, 'chat', $success);
+            $this->auditLog->recordAiUsage($admin, $providerKey, 'chat', $success, $blockedCode);
 
             $assistant = $conversation->messages()->create(['role' => AiChatMessage::ROLE_ASSISTANT, 'content' => $reply]);
             $this->proposals->persist($assistant, $cards);
@@ -139,17 +147,26 @@ class AiChatService
             $conversation ??= $this->createConversation($admin, $providerKey, $prompt);
             $conversation->messages()->create(['role' => AiChatMessage::ROLE_USER, 'content' => $prompt]);
 
+            $blockedCode = null;
+
             try {
                 $storedPath = $this->storeGeneratedImage($provider, AiText::singleLine($prompt, 1000));
                 $content = null;
                 $success = true;
+            } catch (AiBlockedException $e) {
+                // 정책상 차단(예: IMAGE_RECITATION) - 이유별 안내를 대화에 남기고 이미지 한도는 소모하지 않는다.
+                $storedPath = null;
+                $content = $e->getMessage();
+                $success = false;
+                $blockedCode = $e->reasonCode;
+                $reservation->refund();
             } catch (Throwable) {
                 $storedPath = null;
                 $content = __('이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
                 $success = false;
             }
 
-            $this->auditLog->recordAiUsage($admin, $providerKey, 'image', $success);
+            $this->auditLog->recordAiUsage($admin, $providerKey, 'image', $success, $blockedCode);
 
             return $conversation->messages()->create([
                 'role' => AiChatMessage::ROLE_ASSISTANT,
@@ -192,6 +209,12 @@ class AiChatService
             try {
                 $storedPath = $this->storeGeneratedImage($provider, AiText::singleLine($proposal->payload['image_prompt'], 500));
                 $this->auditLog->recordAiUsage($admin, $providerKey, 'image', true);
+            } catch (AiBlockedException $e) {
+                // 정책상 차단 - 이유별 안내를 관리자에게 그대로 보여 주고(제안은 그대로, 이미지 없이 열 수 있다) 이미지 한도는 소모하지 않는다.
+                $reservation->refund();
+                $this->auditLog->recordAiUsage($admin, $providerKey, 'image', false, $e->reasonCode);
+
+                throw new RuntimeException($e->getMessage());
             } catch (Throwable) {
                 $this->auditLog->recordAiUsage($admin, $providerKey, 'image', false);
 
