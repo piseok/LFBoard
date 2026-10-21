@@ -100,3 +100,21 @@
 - **원인(메인의 가설 그대로 확정)**: `targetTextFields()`/`targetImageField()` 가 `request()->is("{$prefix}/posts/create")` 로 화면을 판별 → 위젯 패널을 여는 것(토글)부터 모든 응답이 Livewire 갱신 요청(`livewire/update`)이라 필드 목록이 항상 `[]` → 버튼이 아예 안 그려짐.
 - **수정**: 마운트 때 경로를 `#[Locked] screenPath` 로 저장(+ `AiFormFillSchema::detect` 로 허용 표 판별). 서버도 `fillTextField`·`HasAiFormFill` 에서 같은 표로 재검증.
 - **추가 확인(메인 질문 ①~③)**: ① `data_set` 은 리치 에디터에 반영·표시됨(브라우저 확인; 단 폼 상태는 Tiptap 문서 배열이고 HTML 문자열을 넣어도 저장 시 HTML 로 돌아옴 - `test_widget_event_fills_the_rich_editor_and_the_human_save_persists_it`). FileUpload 는 문자열을 넣으면 미리보기가 글자 배열로 읽힐 수 있어 `[경로]` 배열로 넣도록 바꿈(브라우저에서 업로드 칸에 파일 표시 확인). ② 전체 새로고침 후 위젯 열림·대화 유지(`#[Session]`, 브라우저 확인, 시험 `test_open_state_and_active_conversation_survive_a_full_page_load_via_the_session`); Filament SPA 모드는 쓰지 않음. ③ 카드의 `?ai_proposal=` 미리 채우기 end-to-end 시험 `AiProposalPrefillTest`(게시글: 제목·본문·임시저장 채움 → 저장은 사람 → used+감사 로그) + 브라우저 확인.
+
+## 7. 재개 메모 (사용량 한도로 중단, 2026-10-21)
+
+**완료(전부 커밋됨, 마지막 `e31948bc` 이후 이 메모 커밋)**: 서버(한도·시스템 지시문·도구 호출·카드·가짜 제공자)·위젯 재작성(토큰 CSS, 다크 모드 수정)·작성 화면 미리 채우기(팝업·게시글·페이지·배너)·사이트 설정 AI 탭·감독 화면(오늘 사용량·읽기 전용 카드)·결함 2건 수정+회귀 시험·정책 차단 안내/한도 미소모·문서(table-spec·erd·README·사용가이드·소개서)·`AI_V2_NOTES.md` §1~6.
+
+**하다 만 것 / 남은 것(코드는 문법 깨진 곳 없음, 편집 중인 파일 없음)**
+1. `AI_V2_REPORT.md` 미작성(보고 전문) - 재료는 이 파일 §1~6 + `git diff --name-status dev...HEAD` + 아래 시험 숫자. 단계별 커밋: `a1b4d13b`(문서)·`bbd8c5e7`(WIP 서버)·`e66cdd6e`(서버+위젯)·`e1defc29`(화면+결함 수정)·`0bc5204d`(차단 안내)·`44cec3f6`(문서)·`e31948bc`(차단 한도 미소모 명시).
+2. **Critic 리뷰 결과 미수신**: 읽기 전용 sonnet 에이전트(`abbd323843b4aaa9e`)를 띄워 diff 를 적대적으로 검토하게 했으나 결과를 받기 전에 중단했다(이 세션에서는 TaskStop 불가). 재개하면 같은 범위(권한 누락·IDOR·`AiUsageService::reserve` 경쟁·`generateProposalImage` 이중 생성·`HasAiProposalPrefill`·`SafeMarkdown` 우회·`AdminScreenMap::actingAs` 부작용·위젯 공개 메서드)를 한 번 더 점검할 것.
+3. 사용자 결정 필요(보고에 적을 것): 한도 기본값(관리자 질문 30·이미지 5, 사이트 질문 150·이미지 20), 0=차단(무제한 없음), 카드 문구, 카드 만료 60분, `propose_image`·사이드바 항목을 만들지 않은 결정, 오류로 끝난 호출은 한도 소모.
+4. 접근성 수동 확인(스크린리더 낭독)·Gemini/OpenAI **실호출 도구 호출 실측**은 하지 않았다(메인이 최소로).
+
+**다음 순서**: (a) 전체 시험 1회 `./sync_and_test.sh` (b) Critic 반박 반영 (c) `AI_V2_REPORT.md` 작성·커밋 (d) 메인에 보고. 푸시·병합은 하지 않는다.
+
+**시험 상태**: 마지막으로 통과 확인 - 전체 스위트 `OK (377 tests, 1809 assertions)`(차단 한도 수정 **이전**, 기준 243건). 그 뒤 `--filter='Ai'` 183건 `OK (183 tests, 1293 assertions)`(차단 기준 변경 후). **차단 수정 이후 전체 스위트는 아직 다시 안 돌렸다**(AI 와 무관한 파일은 건드리지 않았지만 재확인 필요). 시험 실행법: scratchpad 의 `sync_and_test.sh`(Docker 볼륨 `cmsadmin_v2` 에 변경 파일을 복사해 phpunit) - 없으면 SCOPE §0 의 명령 패턴.
+
+**차단 호출 한도 미소모 반영 위치·시험**: 정의 `app/Services/Ai/AiBlockedException.php`; Gemini 이미지 판정 `app/Services/Ai/GeminiProvider.php` 180~196행(HTTP 200+이미지 없음+finishReason 이 비어 있지도 STOP 도 아님, 또는 promptFeedback.blockReason → 차단; 5xx·타임아웃·STOP 인데 이미지 없음은 소모), Gemini 채팅 143행 부근·OpenAI `content_filter`/`content_policy_violation`(`OpenAiProvider.php`), 한도 되돌림 `AiChatService.php` 115행(채팅)·162행(이미지 메시지)·215행(카드 이미지)→`AiUsageReservation::refund()`, 기준 주석 `AiUsageService.php` 상단·`GeminiProvider.php` 180행 부근·`AiChatService.php` 일반 실패 catch. 시험 `tests/Feature/Admin/AiProviderBlockedTest.php`(빈 content+IMAGE_RECITATION → 사용 0, 임의 non-STOP 사유 차단, 5xx·503·타임아웃·STOP 이미지 없음은 소모, 카드 이미지 차단 시 제안 유지, 감사 로그 `blocked_reason`) — 통과 확인됨.
+
+**8095 스택(`cmsadminai`) 상태**: 실행 중(앱 `http://localhost:8095`, MySQL 33081, Mailpit 8035/2535). 시더 기본 관리자로 로그인 가능(AdminUserSeeder, 비밀번호는 시더 참고). `.env` 에 `SESSION_COOKIE=cmsadminai_session`(8090 세션과 분리). 컨테이너 `cmsadminai-laravel.test-1` 이 worktree 를 바인드 마운트(vendor 는 볼륨 `cmsadminai_vendor`). 개발 DB 에 시험 데이터(제안 3건·대화 4건·사용 기록)와 설정 `ai_chat_daily_limit_per_admin=30` 이 남아 있다. `docker-compose.override.yml` 은 **커밋하지 않은 로컬 전용 파일**(vendor 볼륨 연결) - worktree 와 함께 지울 것. 정리: `docker compose -p cmsadminai down -v`, `docker volume rm cmsadminai_vendor cmsadmin_v2 cmsadmin_old`, `git worktree remove ..\cms-admin-ai`(메인이 한다). 참고: 내가 먼저 같은 쿠키 이름으로 8095 에 로그인하는 바람에 한동안 8090 의 로그인 세션 쿠키를 덮어썼을 수 있다(8090 에서 다시 로그인하면 됨, 이후 분리).
