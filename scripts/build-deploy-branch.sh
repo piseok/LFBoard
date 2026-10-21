@@ -39,9 +39,110 @@ if [ "$current_branch" != "dev" ]; then
   exit 1
 fi
 
-echo "== 1/6: main으로 전환하고 dev를 병합합니다 =="
+echo "== 1/6: main으로 전환하고 dev의 새 커밋을 cherry-pick합니다 =="
 git checkout main
-git merge dev --no-edit
+
+# 2026-09-02 — main과 dev는 git 상 완전히 무관한 히스토리다(git merge-base main dev가 아무것도
+# 반환하지 않음 — 과거 어느 시점에 LFBoard 저장소가 dev와 진짜 조상 관계 없이 별도로 구성된
+# 것으로 추정). 그래서 예전의 `git merge dev`는 이제 항상 "refusing to merge unrelated
+# histories"로 실패한다. 병합 대신, main 루트의 마커 파일에 "마지막으로 main에 반영한 dev 커밋"을
+# 기록해두고 그 이후 dev 커밋만 순서대로 cherry-pick하는 방식으로 바꾼다.
+DEPLOY_MARKER_FILE="${REPO_ROOT}/.deploy-source-commit"
+
+if [ ! -f "$DEPLOY_MARKER_FILE" ]; then
+  echo "오류: $DEPLOY_MARKER_FILE이 main에 없습니다." >&2
+  echo "  main/dev가 unrelated-histories라 '어디까지 이미 포팅됐는지' 자동으로 알 수 없습니다." >&2
+  echo "  최초 1회만 수동으로 시드하세요(이미 main에 반영된 마지막 dev 커밋의 SHA를 적어야 함):" >&2
+  echo "    echo '<커밋 SHA>' > $DEPLOY_MARKER_FILE && git add .deploy-source-commit && git commit -m 'Seed deploy marker'" >&2
+  exit 1
+fi
+
+last_synced="$(tr -d '[:space:]' < "$DEPLOY_MARKER_FILE")"
+
+if ! git cat-file -e "${last_synced}^{commit}" 2>/dev/null; then
+  echo "오류: $DEPLOY_MARKER_FILE에 적힌 커밋(${last_synced})을 찾을 수 없습니다." >&2
+  exit 1
+fi
+
+if ! git merge-base --is-ancestor "$last_synced" dev; then
+  echo "오류: ${last_synced}이 dev 히스토리의 조상이 아닙니다 — $DEPLOY_MARKER_FILE 값을 확인하세요." >&2
+  exit 1
+fi
+
+pick_list="$(git log --reverse --format=%H "${last_synced}..dev")"
+
+if [ -z "$pick_list" ]; then
+  echo "dev에 새 커밋이 없습니다 — cherry-pick할 것이 없습니다."
+else
+  echo "다음 커밋을 main에 순서대로 cherry-pick합니다:"
+  git log --reverse --oneline "${last_synced}..dev"
+
+  # main엔 원래부터 없어야 하는 dev 전용 경로(하네스/문서) — cherry-pick 중 이 경로에서만
+  # modify/delete 충돌이 나면 "삭제 유지"로 자동 해결한다. 그 외 경로 충돌은 사람이 봐야 한다.
+  dev_only_pattern='^(\.claude/|\.github/|CLAUDE\.md$|PROJECT\.md$|claude_code_prompts\.md$)'
+
+  for sha in $pick_list; do
+    if ! git cherry-pick "$sha" >/tmp/cherry_pick_output_$$.log 2>&1; then
+      unresolvable=""
+      for f in $(git diff --name-only --diff-filter=U); do
+        if printf '%s\n' "$f" | grep -qE "$dev_only_pattern"; then
+          git rm -f --ignore-unmatch -- "$f" >/dev/null 2>&1 || rm -f -- "$f"
+        else
+          # 2026-10-21: main 은 public/ 을 평탄화해 둔 브랜치라 dev 의 public/… 경로와 어긋난 "추가/삭제" 충돌이
+          # 나는 경우가 있다(js/home-banner-tabs.js 추가·삭제, install.php 삭제). 이 두 모양은 dev 쪽 의도를
+          # 그대로 따르면 되므로 자동으로 푼다(임시 worktree 모의 실행으로 26커밋이 끝까지 적용됨을 확인):
+          #   UA/AA/AU/DU(그 커밋이 파일을 추가했거나 우리 쪽에 없음) → 그 커밋의 버전을 채택
+          #   UD(그 커밋이 파일을 삭제함) → 삭제를 수용
+          # 둘 다 아닌 내용 충돌(UU 등)은 여전히 사람이 본다.
+          case "$(git status --short -- "$f" | cut -c1-2)" in
+            UA|AA|AU|DU)
+              if git checkout --theirs -- "$f" 2>/dev/null && git add -- "$f"; then
+                echo "  (자동 해결: $f → 이 커밋의 버전 채택)"
+              else
+                unresolvable="$unresolvable $f"
+              fi
+              ;;
+            UD)
+              if git rm -f -- "$f" >/dev/null 2>&1; then
+                echo "  (자동 해결: $f → 이 커밋이 삭제한 파일, 삭제 수용)"
+              else
+                unresolvable="$unresolvable $f"
+              fi
+              ;;
+            *)
+              unresolvable="$unresolvable $f"
+              ;;
+          esac
+        fi
+      done
+      if [ -n "$unresolvable" ]; then
+        echo "오류: ${sha} cherry-pick 중 자동으로 해결할 수 없는 충돌이 발생했습니다:" >&2
+        echo "$unresolvable" >&2
+        cat "/tmp/cherry_pick_output_$$.log" >&2
+        echo "수동으로 해결한 뒤 'git cherry-pick --continue', 그 다음 이 스크립트를 다시 실행하세요." >&2
+        rm -f "/tmp/cherry_pick_output_$$.log"
+        exit 1
+      fi
+      if git diff --cached --quiet; then
+        # 이 커밋의 변경사항이 전부 dev 전용 경로였던 경우 — main엔 반영할 내용이 없음
+        git cherry-pick --skip
+      else
+        git cherry-pick --continue --no-edit
+      fi
+    fi
+    rm -f "/tmp/cherry_pick_output_$$.log"
+  done
+fi
+
+echo "== deploy marker 갱신 =="
+new_dev_head="$(git rev-parse dev)"
+echo "$new_dev_head" > "$DEPLOY_MARKER_FILE"
+git add .deploy-source-commit
+if git diff --cached --quiet; then
+  echo "마커 변경 없음(이미 최신)."
+else
+  git commit -m "Update deploy source marker to ${new_dev_head:0:8}"
+fi
 
 # dev를 병합할 때마다 dev 전용 .github/workflows(CI)와 dev용 전체 .gitignore가 그대로
 # 딸려 들어온다. main은 다운받아서 그대로 서버에 올리는 배포 스냅샷이라 CI 워크플로우가
@@ -152,7 +253,16 @@ if git diff --cached --quiet; then
 else
   git commit -m "Rebuild deploy vendor from dev ($(date +%Y-%m-%d))"
 fi
-git push origin main
+# 2026-08-19에 origin이 lfboard-dev로 바뀌고 main 브랜치가 없어져(실제 배포 저장소는
+# 별도 lfboard 리모트, https://github.com/piseok/LFBoard.git) 이 줄이 stale해졌었는데
+# 스크립트 자체는 그때 안 고쳐져 있었다(2026-09-02 발견, 여기서 수정) — origin이 아니라
+# lfboard 리모트로 push해야 실제 LFBoard 저장소에 반영된다.
+# SKIP_PUSH=1 이면 푸시를 건너뛴다(2026-10-21: 결과를 눈으로 확인한 뒤 직접 `git push lfboard main`·`git push origin dev`).
+if [ -n "${SKIP_PUSH:-}" ]; then
+  echo "SKIP_PUSH 설정됨 — lfboard main 푸시를 건너뜁니다."
+else
+  git push lfboard main
+fi
 
 echo "== 6/6: dev로 돌아가서 개발용 vendor(dev 의존성 포함)를 복원합니다 =="
 git checkout dev
@@ -161,7 +271,11 @@ git checkout dev
 # 이 컴퓨터에만 쌓이고 GitHub에는 전혀 반영되지 않는 문제가 있었다(디스크가 날아가면
 # 작업 내역이 통째로 사라지는 위험). main 배포 때마다 dev도 함께 백업되도록 항상 푸시한다.
 echo "== dev 브랜치도 원격에 푸시합니다 (백업) =="
-git push origin dev
+if [ -n "${SKIP_PUSH:-}" ]; then
+  echo "SKIP_PUSH 설정됨 — origin dev 푸시를 건너뜁니다."
+else
+  git push origin dev
+fi
 
 docker exec "$CONTAINER" rm -rf "$BUILD_DIR"
 docker exec "$CONTAINER" mkdir -p "$BUILD_DIR"
