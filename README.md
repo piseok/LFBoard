@@ -89,7 +89,7 @@ public/
 | `PruneAdminAuditLogs` | 사이트 설정에 지정한 보관 기간이 지난 감사로그(접속 기록 포함)를 하루 1번 정리 |
 | `ProcessDormantAccounts` | 휴면 전환 대상/강제탈퇴 대상/예고 메일 발송 대상을 하루 1번 확인·처리 |
 | `ApplyScheduledPolicyChanges` | 예약된 약관/정책 변경 중 시행일이 지난 건을 하루 1번 확인해 실제 내용에 반영 |
-| `PruneAiChatHistory` | 사이트 설정에 지정한 보관 기간이 지난 AI 비서 대화(및 생성 이미지)를 하루 1번 완전 삭제 |
+| `PruneAiChatHistory` | 사이트 설정에 지정한 보관 기간이 지난 AI 비서 대화(및 생성 이미지·저장에 쓰이지 않은 카드 이미지·행동 카드)를 하루 1번 완전 삭제하고, 일일 한도 계산용 사용 기록(`ai_chat_usage`)은 35일 지난 것만 정리 |
 | `PruneInquiries` | 사이트 설정에 지정한 보유기간이 지난 1:1 문의(첨부파일 포함)를 하루 1번 완전 삭제(파기) |
 | `SyncVendorNotices` | 사이트 설정에 관리업체 공지사항 API가 켜져 있으면 1시간에 1번 폴링해 `vendor_notices`에 반영(캐시 플래그 단위만 시간(hour)으로, 나머지는 동일한 패턴) |
 
@@ -117,7 +117,9 @@ public/
 | `DormantAccountService` | 휴면계정 전환/강제탈퇴 처리 로직 |
 | `HtmlSanitizerService` | 리치에디터/메일 본문 HTML 화이트리스트 필터링(XSS 방지) |
 | `UploadService` | 파일 업로드/삭제/복사(`duplicate()`) 공용 처리 — 레코드를 복제(`replicate()`)할 때 첨부 이미지도 새 경로로 함께 복사해 원본과 파일을 공유하지 않게 함(배너/게시판/팝업/페이지의 "복제" 액션이 사용) |
-| `AiChatService` | AI 비서(관리자 채팅 위젯) 오케스트레이션 — `app/Services/Ai/`의 `AiProviderContract`를 구현하는 `OpenAiProvider`/`GeminiProvider` 중 사이트 설정에 키가 있는 제공자만 노출. 새 제공자를 추가하려면 이 인터페이스만 구현하면 됨 |
+| `AiChatService` | AI 비서(관리자 채팅 위젯) 오케스트레이션 — `app/Services/Ai/`의 `AiProviderContract`를 구현하는 `OpenAiProvider`/`GeminiProvider` 중 사이트 설정에 키가 있는 제공자만 노출(local 환경에서만 비용 없는 "개발용 가짜" 제공자 `FakeChatProvider` 추가). 새 제공자를 추가하려면 이 인터페이스(`chat`/`chatWithTools`/`generateImage`/`supportsTools`)만 구현하면 됨. 한 번 호출에 시스템 지시문(`AiSystemPromptBuilder` — 오늘 시각 + 이 관리자가 열 수 있는 화면 지도, URL 없음)과 도구 선언을 함께 보내고, 모델의 도구 호출은 `AiProposalService`가 검증해 "행동 카드"(`ai_chat_proposals`)로만 저장한다 — **실행(저장)은 없다**: 카드의 버튼이 작성 화면(`?ai_proposal=`)을 열면 `HasAiProposalPrefill`이 폼에 비공개 상태로 채우기만 하고 저장은 사람이 한다. 정책상 차단된 응답(`IMAGE_RECITATION` 등)은 사유 코드 안내로 바꾸고 한도를 소모하지 않는다 |
+| `AiUsageService` | AI 비서 일일 한도(질문/이미지, 관리자별+사이트 전체, `ai_chat_usage` 선기록→집계→초과 시 되돌림, 관리자별 동시 1건, 0=차단). 설정 키 `ai_chat_daily_limit(_per_admin)`·`ai_image_daily_limit(_per_admin)`(사이트 설정 > AI 연동). 위젯·설정·감독 화면의 "오늘 남은 횟수/사용량"은 이 서비스가 API 호출 없이 계산 |
+| `AdminScreenMap` / `AiFormFillSchema` | AI 가 아는 관리자 화면 지도(키·이름·설명, 현재 관리자가 접근 가능한 것만) / "열려 있는 작성·수정 화면에 채우기" 허용 필드 표(`HasAiFormFill`이 서버에서 다시 검증) |
 
 ---
 

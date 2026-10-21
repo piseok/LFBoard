@@ -4,7 +4,7 @@
 > 테이블/컬럼 추가·삭제·변경 시 이 문서와 `docs/erd.html`도 같이 고칠 것 (PROJECT.md > DB 규칙 참고).
 
 
-공통 CMS 스키마 28개 테이블 — `dev`/LFboard 등 LMS 기능이 없는 브랜치 기준. (future-mobility 전용 LMS 테이블은 제외됨 — 해당 브랜치는 `docs/table-spec.md`에 전체 버전이 있음)
+공통 CMS 스키마 30개 테이블 — `dev`/LFboard 등 LMS 기능이 없는 브랜치 기준. (future-mobility 전용 LMS 테이블은 제외됨 — 해당 브랜치는 `docs/table-spec.md`에 전체 버전이 있음)
 
 ## 테이블 목록
 
@@ -38,6 +38,8 @@
 | 26 | `ai_chat_conversations` | AI 챗봇 대화방(회원별) | 7 |
 | 27 | `ai_chat_messages` | AI 챗봇 대화 메시지 | 6 |
 | 28 | `pages` | 정적 페이지(회사소개 등) | 18 |
+| 29 | `ai_chat_usage` | AI 비서 일일 한도 계산용 호출 기록 | 5 |
+| 30 | `ai_chat_proposals` | AI 비서 행동 카드(제안) | 10 |
 
 ---
 
@@ -503,6 +505,35 @@
 | `content` | text | Y |  |  |  | 메시지 본문 |
 | `image_path` | varchar(255) | Y |  |  |  | 첨부 이미지 경로(있는 경우) |
 | `created_at` | timestamp | N | CURRENT_TIMESTAMP |  |  | 전송일시 |
+
+### `ai_chat_usage` — AI 비서 일일 한도 계산용 호출 기록(대화 삭제와 무관하게 유지)
+
+> 2026-10-21 AI 비서 2.0 추가. 한 줄 = 제공자 호출 1회. 호출 직전에 먼저 적고 → 오늘 건수를 센 뒤 → 한도 초과면 지운다. 정책상 차단된 호출(결과 없음)은 되돌린다.
+
+| 컬럼명 | 타입 | NULL | 기본값 | PK | FK | 설명 |
+|---|---|---|---|---|---|---|
+| `id` | bigint unsigned | N |  | PK |  | 기본 키 |
+| `user_id` | bigint unsigned | Y |  |  | `users` | 호출한 관리자(users.id) - 관리자 삭제 시 null, 사이트 전체 합계에는 계속 포함 |
+| `provider` | varchar(20) | N |  |  |  | AI 제공자(openai/gemini/fake) |
+| `kind` | varchar(10) | N |  |  |  | 호출 종류(chat=질문, image=이미지 생성) |
+| `created_at` | timestamp | N |  |  |  | 호출 시각(앱 시간대) - "오늘" 건수 계산 기준 |
+
+### `ai_chat_proposals` — AI 비서 행동 카드(제안)
+
+> 2026-10-21 AI 비서 2.0 추가. 모델의 도구 호출을 서버가 검증·정규화해 저장한다. 실행(저장)은 없다 - 관리자가 카드의 링크로 작성 화면을 열면 그 화면이 폼에 채우기만 하고 저장은 사람이 한다.
+
+| 컬럼명 | 타입 | NULL | 기본값 | PK | FK | 설명 |
+|---|---|---|---|---|---|---|
+| `id` | bigint unsigned | N |  | PK |  | 기본 키 |
+| `message_id` | bigint unsigned | N |  |  | `ai_chat_messages` | 제안이 붙은 AI 답변 메시지 - 메시지 삭제 시 함께 삭제 |
+| `kind` | varchar(20) | N |  |  |  | 제안 종류(popup/post/page/banner/open_page) |
+| `payload` | json | N |  |  |  | 서버가 검증·정규화한 제안 값(모델 원문 아님) |
+| `status` | varchar(20) | N | proposed |  |  | 상태(proposed=제안됨, image_ready=이미지 생성됨, used=작성 화면에서 저장됨, expired=만료) |
+| `expires_at` | timestamp | N |  |  |  | 이 시각이 지나면 작성 화면에서 열 수 없음(생성 후 1시간) |
+| `image_path` | varchar(255) | Y |  |  |  | 카드에서 생성한 이미지 경로(uploads 디스크 기준) |
+| `used_at` | timestamp | Y |  |  |  | 작성 화면에서 실제 저장된 시각 |
+| `used_record_id` | bigint unsigned | Y |  |  |  | 저장되어 만들어진 레코드의 id(종류별로 popups/posts/pages/banners) |
+| `created_at` | timestamp | N |  |  |  | 제안 생성 시각 |
 
 ### `pages` — 정적 페이지(회사소개 등)
 

@@ -129,6 +129,8 @@ erDiagram
     users ||--o{ visit_logs : "방문"
     users ||--o{ ai_chat_conversations : "대화"
     ai_chat_conversations ||--o{ ai_chat_messages : "메시지"
+    ai_chat_messages ||--o{ ai_chat_proposals : "행동 카드"
+    users ||--o{ ai_chat_usage : "AI 호출 기록"
     vendor_notices ||--o{ users : "마지막확인"
 
     users {
@@ -510,6 +512,25 @@ erDiagram
         text content "메시지 본문"
         varchar image_path "첨부 이미지 경로(있는 경우)"
         timestamp created_at "전송일시"
+    }
+    ai_chat_usage {
+        bigint id PK "기본 키"
+        bigint user_id FK "호출한 관리자(삭제 시 null)"
+        varchar provider "AI 제공자(openai/gemini/fake)"
+        varchar kind "호출 종류(chat/image)"
+        timestamp created_at "호출 시각(앱 시간대)"
+    }
+    ai_chat_proposals {
+        bigint id PK "기본 키"
+        bigint message_id FK "제안이 붙은 AI 답변 메시지"
+        varchar kind "제안 종류(popup/post/page/banner/open_page)"
+        json payload "서버가 검증한 제안 값"
+        varchar status "상태(proposed/image_ready/used/expired)"
+        timestamp expires_at "만료 시각(1시간)"
+        varchar image_path "카드에서 생성한 이미지 경로"
+        timestamp used_at "저장된 시각"
+        bigint used_record_id "만들어진 레코드 id"
+        timestamp created_at "제안 생성 시각"
     }
     pages {
         bigint id PK "기본 키"
