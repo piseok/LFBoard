@@ -114,12 +114,25 @@ class AiProviderBlockedTest extends TestCase
         $this->assertStringNotContainsString('<script', $e->getMessage());
     }
 
-    public function test_image_without_a_policy_reason_is_still_a_plain_failure(): void
+    // 사용자 확정 기준: HTTP 200 + 이미지 없음 + finishReason 이 STOP 이 아니면 차단(한도 미소모) - 사유가 IMAGE_* 가 아니어도 마찬가지.
+    public function test_any_non_stop_finish_reason_without_an_image_is_a_blocked_response(): void
+    {
+        foreach (['MAX_TOKENS', 'OTHER', 'FINISH_REASON_UNSPECIFIED', 'LANGUAGE'] as $reason) {
+            $this->fakeGemini(['content' => [], 'finishReason' => $reason]);
+
+            try {
+                $this->gemini()->generateImage('x');
+                $this->fail("{$reason} 는 차단 예외여야 합니다");
+            } catch (AiBlockedException $e) {
+                $this->assertSame($reason, $e->reasonCode);
+            }
+        }
+    }
+
+    public function test_image_without_a_finish_reason_or_with_stop_is_still_a_plain_failure_that_counts(): void
     {
         foreach ([
             ['content' => ['parts' => [['text' => '이미지를 만들 수 없습니다']]], 'finishReason' => 'STOP'],
-            ['content' => [], 'finishReason' => 'MAX_TOKENS'],
-            ['content' => [], 'finishReason' => 'OTHER'],
             ['content' => []],
         ] as $candidate) {
             $this->fakeGemini($candidate);
@@ -234,15 +247,37 @@ class AiProviderBlockedTest extends TestCase
         $this->assertSame(1, AiChatUsage::where('kind', 'image')->count());
     }
 
-    public function test_a_plain_provider_failure_still_counts_against_the_limit(): void
+    // 사용자 확정 기준(java-cms 와 같음): 5xx·타임아웃·연결 오류·이미지 없는 STOP 응답은 비용이 들었을 수 있어 한도를 소모한다.
+    public function test_server_errors_timeouts_and_stop_without_image_still_count_against_the_limit(): void
     {
-        $this->fakeGemini(['content' => [], 'finishReason' => 'OTHER']);
+        app(SiteSettingService::class)->set('ai_gemini_api_key', 'gm-SECRET-KEY', 'ai');
         $admin = $this->admin();
+        $conversationId = null;
+        $expected = 0;
 
-        $message = app(AiChatService::class)->generateImage($admin, null, 'gemini', '아이콘');
+        $scenarios = [
+            'HTTP 500' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['error' => 'boom'], 500)]),
+            'HTTP 503' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => Http::response([], 503)]),
+            '타임아웃' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => fn () => throw new \Illuminate\Http\Client\ConnectionException('timeout')]),
+            'STOP 인데 이미지 없음' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => '못 만들었어요']]], 'finishReason' => 'STOP']]])]),
+        ];
 
-        $this->assertStringContainsString('이미지 생성에 실패했습니다', $message->content);
-        $this->assertSame(1, AiChatUsage::where('kind', 'image')->count(), '일반 실패는 제공자 쪽에서 과금될 수 있어 보수적으로 센다');
+        foreach ($scenarios as $label => $arrange) {
+            Http::swap(new \Illuminate\Http\Client\Factory);
+            $arrange();
+
+            $message = app(AiChatService::class)->generateImage($admin, $conversationId, 'gemini', '아이콘');
+            $conversationId = $message->conversation_id;
+            $expected++;
+
+            $this->assertStringContainsString('이미지 생성에 실패했습니다', $message->content, $label);
+            $this->assertSame($expected, AiChatUsage::where('kind', 'image')->count(), "{$label}: 한도를 소모해야 합니다");
+        }
+
+        // 반대로 정책 차단은 같은 대화에서 이어서 시도해도 0 - 위 4건 뒤에도 늘지 않는다.
+        $this->fakeGemini($this->recitation());
+        app(AiChatService::class)->generateImage($admin, $conversationId, 'gemini', '정책 차단');
+        $this->assertSame($expected, AiChatUsage::where('kind', 'image')->count());
     }
 
     public function test_a_blocked_card_image_keeps_the_proposal_and_does_not_use_the_limit(): void

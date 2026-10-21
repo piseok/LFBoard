@@ -178,16 +178,19 @@ class GeminiProvider implements AiProviderContract
         $bytes = $inline === null ? false : base64_decode($inline['data'], true);
 
         if ($bytes === false || $bytes === '') {
-            // 이미지가 없을 때: 프롬프트 차단 또는 STOP 이 아닌 정책 사유(IMAGE_RECITATION·IMAGE_SAFETY·SAFETY 등)면 이유별 안내(한도 미소모),
-            // 그 밖이면 일반 오류. finishMessage·원문 응답은 노출하지 않는다(사유 코드만).
+            // 한도 소모 기준(사용자 확정 2026-10-21):
+            //  - 정책상 차단 = HTTP 200 + 이미지 없음 + finishReason 이 비어 있지도 STOP 도 아님(IMAGE_RECITATION·RECITATION·IMAGE_SAFETY·
+            //    SAFETY·PROHIBITED_CONTENT 등), 또는 프롬프트 자체 차단(promptFeedback.blockReason) → 이유별 안내(사유 코드만, finishMessage·
+            //    원문 응답·키는 노출 금지)를 보여 주고 **하루 이미지 한도를 소모하지 않는다**(AiChatService 가 선기록한 사용 한 줄을 되돌린다).
+            //  - 5xx·타임아웃·연결 오류(위 successful() 검사에서 RuntimeException)와 STOP 인데 이미지가 없는 응답은 비용이 들었을 수 있어
+            //    **소모한다**(java-cms 와 같은 기준).
             $finishReason = (string) $response->json('candidates.0.finishReason', '');
 
             if (filled($response->json('promptFeedback.blockReason'))) {
                 throw AiBlockedException::forImage((string) $response->json('promptFeedback.blockReason'));
             }
 
-            if ($finishReason !== '' && $finishReason !== 'STOP'
-                && (in_array($finishReason, self::POLICY_FINISH_REASONS, true) || str_starts_with($finishReason, 'IMAGE_'))) {
+            if ($finishReason !== '' && $finishReason !== 'STOP') {
                 throw AiBlockedException::forImage($finishReason);
             }
 

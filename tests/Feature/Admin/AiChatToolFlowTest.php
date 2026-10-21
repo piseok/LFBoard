@@ -5,6 +5,7 @@ namespace Tests\Feature\Admin;
 use App\Models\AiChatConversation;
 use App\Models\AiChatMessage;
 use App\Models\AiChatProposal;
+use App\Models\AiChatUsage;
 use App\Models\User;
 use App\Services\Ai\AiLimitExceededException;
 use App\Services\AiChatService;
@@ -350,6 +351,36 @@ class AiChatToolFlowTest extends TestCase
         $this->assertSame(1, \App\Models\AiChatUsage::where('provider', 'fake')->where('kind', 'image')->count());
 
         Http::assertNothingSent();
+    }
+
+    // 보관 기간이 지나 대화를 지울 때: 저장에 쓰이지 않은(고아) 카드 이미지는 함께 지우고, 이미 팝업·배너·페이지가 쓰는(used) 이미지는 남긴다.
+    public function test_prune_removes_orphan_card_images_but_keeps_images_used_by_saved_records(): void
+    {
+        Storage::fake('uploads');
+        app(SiteSettingService::class)->set('ai_chat_retention_days', '30', 'ai');
+        $admin = $this->admin();
+        $conversation = AiChatConversation::create(['user_id' => $admin->id, 'provider' => 'gemini', 'title' => '오래된 대화']);
+        $conversation->forceFill(['created_at' => now()->subDays(90)])->save();
+        $message = AiChatMessage::create(['conversation_id' => $conversation->id, 'role' => 'assistant', 'content' => '카드']);
+
+        foreach (['orphan' => AiChatProposal::STATUS_IMAGE_READY, 'kept' => AiChatProposal::STATUS_USED] as $name => $status) {
+            Storage::disk('uploads')->put("uploads/ai_generated/2026/07/{$name}.png", 'x');
+            AiChatProposal::create([
+                'message_id' => $message->id, 'kind' => 'popup', 'payload' => ['title' => $name], 'status' => $status,
+                'expires_at' => now()->subDays(80), 'created_at' => now()->subDays(80), 'image_path' => "uploads/ai_generated/2026/07/{$name}.png",
+            ]);
+        }
+
+        AiChatUsage::create(['user_id' => $admin->id, 'provider' => 'gemini', 'kind' => 'chat', 'created_at' => now()->subDays(60)]);
+        AiChatUsage::create(['user_id' => $admin->id, 'provider' => 'gemini', 'kind' => 'chat', 'created_at' => now()]);
+
+        app(AiChatService::class)->pruneExpired();
+
+        Storage::disk('uploads')->assertMissing('uploads/ai_generated/2026/07/orphan.png');
+        Storage::disk('uploads')->assertExists('uploads/ai_generated/2026/07/kept.png');
+        $this->assertDatabaseCount('ai_chat_proposals', 0); // 메시지와 함께 연쇄 삭제
+        $this->assertDatabaseCount('ai_chat_conversations', 0);
+        $this->assertSame(1, AiChatUsage::count(), '오래된 사용 기록만 정리되고 오늘 것은 남는다');
     }
 
     public function test_message_timestamps_use_the_app_timezone_not_the_database_default(): void

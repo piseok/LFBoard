@@ -161,6 +161,7 @@ class AiChatService
                 $blockedCode = $e->reasonCode;
                 $reservation->refund();
             } catch (Throwable) {
+                // 5xx·타임아웃·연결 오류·이미지 없는 STOP 응답은 비용이 들었을 수 있어 한도에서 되돌리지 않는다(소모, java-cms 와 같은 기준).
                 $storedPath = null;
                 $content = __('이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
                 $success = false;
