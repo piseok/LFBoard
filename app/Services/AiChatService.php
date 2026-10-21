@@ -7,16 +7,21 @@ use App\Models\AiChatMessage;
 use App\Models\AiChatProposal;
 use App\Models\User;
 use App\Services\Ai\AiBlockedException;
+use App\Services\Ai\AiBusyException;
+use App\Services\Ai\AiFormFillSchema;
+use App\Services\Ai\AiLimitExceededException;
 use App\Services\Ai\AiProposalService;
 use App\Services\Ai\AiProviderContract;
+use App\Services\Ai\AiProviderException;
 use App\Services\Ai\AiSystemPromptBuilder;
+use App\Services\Ai\AiUserFacingException;
 use App\Services\Ai\FakeChatProvider;
 use App\Services\Ai\GeminiProvider;
 use App\Services\Ai\OpenAiProvider;
 use App\Support\AiText;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
-use RuntimeException;
 use Throwable;
 
 class AiChatService
@@ -43,12 +48,18 @@ class AiChatService
             'gemini' => new GeminiProvider($this->siteSettings),
         ];
 
-        // 개발용 가짜 제공자 - local 환경에서만 존재한다(운영·시험에서는 목록에도 호출에도 나오지 않는다).
-        if (app()->environment('local')) {
+        // 개발용 가짜 제공자 - APP_ENV=local "이고" 명시 플래그(AI_FAKE_PROVIDER=true → config services.ai.fake_provider)를 켠 개발 환경에서만
+        // 존재한다. 환경 이름 하나만 믿으면 운영에 APP_ENV=local 이 잘못 들어갔을 때 API 키 없이도 위젯이 노출된다(리뷰 L7).
+        if (self::fakeProviderEnabled()) {
             $providers['fake'] = new FakeChatProvider;
         }
 
         return $providers;
+    }
+
+    public static function fakeProviderEnabled(): bool
+    {
+        return app()->environment('local') && config('services.ai.fake_provider') === true;
     }
 
     // API 키가 설정된 제공자만 반환한다 — 퀵메뉴 위젯은 이 목록이 비어 있으면 아예 표시되지 않는다.
@@ -65,9 +76,11 @@ class AiChatService
         return $available;
     }
 
+    // 알 수 없거나 더 이상 쓸 수 없는 제공자(키가 지워졌거나 개발용 가짜인데 개발 환경이 아님)는 관리자에게 보여 줄 안내 예외로 -
+    // 예전에는 InvalidArgumentException 이 위젯에서 처리되지 않아 500 이 났다(리뷰 M2).
     public function provider(string $key): AiProviderContract
     {
-        return $this->providers()[$key] ?? throw new InvalidArgumentException("Unknown AI provider: {$key}");
+        return $this->providers()[$key] ?? throw new AiUserFacingException(__('선택한 AI 제공자를 쓸 수 없습니다. 다른 제공자를 선택하거나 사이트 설정에서 API 키를 확인해주세요.'));
     }
 
     // 도구 호출 사용 여부 - 제공자가 지원하고 사이트 설정(기본 켬)에서 꺼 두지 않았을 때만. 꺼지면 도구·카드 없이
@@ -78,8 +91,8 @@ class AiChatService
     }
 
     /**
-     * @throws \App\Services\Ai\AiLimitExceededException 오늘 한도 초과(제공자는 호출하지 않았다)
-     * @throws \App\Services\Ai\AiBusyException 같은 관리자의 이전 요청이 처리 중
+     * @throws AiLimitExceededException 오늘 한도 초과(제공자는 호출하지 않았다)
+     * @throws AiBusyException 같은 관리자의 이전 요청이 처리 중
      */
     public function sendMessage(User $admin, ?int $conversationId, string $providerKey, string $message, ?string $screenPath = null): AiChatMessage
     {
@@ -113,7 +126,8 @@ class AiChatService
                 $success = false;
                 $blockedCode = $e->reasonCode;
                 $reservation->refund();
-            } catch (Throwable) {
+            } catch (Throwable $e) {
+                $this->logProviderFailure($providerKey, 'chat', $e);
                 // 빈 후보·잘못된 도구 인자·HTTP 오류 모두 재시도 없이 일반 오류 문구(재시도는 곧 비용).
                 $reply = __('AI 응답을 받아오지 못했습니다. 잠시 후 다시 시도해주세요.');
                 $success = false;
@@ -160,7 +174,8 @@ class AiChatService
                 $success = false;
                 $blockedCode = $e->reasonCode;
                 $reservation->refund();
-            } catch (Throwable) {
+            } catch (Throwable $e) {
+                $this->logProviderFailure($providerKey, 'image', $e);
                 // 5xx·타임아웃·연결 오류·이미지 없는 STOP 응답은 비용이 들었을 수 있어 한도에서 되돌리지 않는다(소모, java-cms 와 같은 기준).
                 $storedPath = null;
                 $content = __('이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
@@ -183,14 +198,14 @@ class AiChatService
      * 행동 카드의 "이미지 만들고 열기": 소유자·만료·상태를 확인하고 제안에 이미지 1장을 만들어 붙인다(이미지 한도 적용).
      * 이미 이미지가 있으면 다시 만들지 않는다. 제목·날짜 등은 제안 생성 때 이미 검증되어 있다.
      *
-     * @throws RuntimeException 제안을 찾을 수 없음/만료/이미지 생성 실패
+     * @throws AiUserFacingException 제안을 찾을 수 없음/만료/이미지 생성 실패(메시지를 그대로 보여 줘도 안전)
      */
     public function generateProposalImage(User $admin, int $proposalId): AiChatProposal
     {
         $proposal = $this->proposals->resolveOwned($admin, $proposalId);
 
         if ($proposal === null) {
-            throw new RuntimeException(__('제안을 찾을 수 없거나 만료되었습니다. 다시 요청해주세요.'));
+            throw new AiUserFacingException(__('제안을 찾을 수 없거나 만료되었습니다. 다시 요청해주세요.'));
         }
 
         if (filled($proposal->image_path) || blank($proposal->payload['image_prompt'] ?? null)) {
@@ -201,12 +216,29 @@ class AiChatService
         $provider = $this->requireConfigured($providerKey);
 
         if (! $provider->supportsImageGeneration()) {
-            throw new RuntimeException(__('이 AI 제공자는 이미지 생성을 지원하지 않습니다.'));
+            throw new AiUserFacingException(__('이 AI 제공자는 이미지 생성을 지원하지 않습니다.'));
         }
 
         $reservation = $this->usage->reserve($admin, $providerKey, AiUsageService::KIND_IMAGE);
 
         try {
+            // 관리자별 잠금을 잡은 "뒤에" 제안을 다시 읽는다. 위 첫 조회는 잠금 없이 한 것이라, 그 사이 다른 탭의 요청이 이미지를 만들어
+            // 끝났을 수 있다 - 그대로 진행하면 이미지를 두 번 만들어 두 번 과금된다(리뷰 L1, 파일은 아래 원자 갱신이 지우지만 비용은 이미 발생).
+            // 이 경우 제공자를 부르지 않았으니 선기록한 사용 한 줄도 되돌린다.
+            $proposal = $this->proposals->resolveOwned($admin, $proposalId);
+
+            if ($proposal === null) {
+                $reservation->refund();
+
+                throw new AiUserFacingException(__('제안을 찾을 수 없거나 만료되었습니다. 다시 요청해주세요.'));
+            }
+
+            if (filled($proposal->image_path)) {
+                $reservation->refund();
+
+                return $proposal;
+            }
+
             try {
                 $storedPath = $this->storeGeneratedImage($provider, AiText::singleLine($proposal->payload['image_prompt'], 500));
                 $this->auditLog->recordAiUsage($admin, $providerKey, 'image', true);
@@ -215,11 +247,12 @@ class AiChatService
                 $reservation->refund();
                 $this->auditLog->recordAiUsage($admin, $providerKey, 'image', false, $e->reasonCode);
 
-                throw new RuntimeException($e->getMessage());
-            } catch (Throwable) {
+                throw new AiUserFacingException($e->getMessage());
+            } catch (Throwable $e) {
+                $this->logProviderFailure($providerKey, 'proposal_image', $e);
                 $this->auditLog->recordAiUsage($admin, $providerKey, 'image', false);
 
-                throw new RuntimeException(__('이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.'));
+                throw new AiUserFacingException(__('이미지 생성에 실패했습니다. 잠시 후 다시 시도해주세요.'));
             }
 
             // 원자적 상태 전이 - 다른 탭이 먼저 끝냈으면 우리가 만든 파일은 지우고 그쪽 결과를 쓴다.
@@ -260,10 +293,24 @@ class AiChatService
         $provider = $this->provider($providerKey);
 
         if (! $provider->isConfigured()) {
-            throw new InvalidArgumentException("AI provider is not configured: {$providerKey}");
+            throw new AiUserFacingException(__('선택한 AI 제공자를 쓸 수 없습니다. 다른 제공자를 선택하거나 사이트 설정에서 API 키를 확인해주세요.'));
         }
 
         return $provider;
+    }
+
+    // 제공자 호출 실패를 로그에 남긴다 - 퇴역 모델(404)·잘못된 키(401/403)·한도(429)가 운영에서 조용히 삼켜지지 않게(리뷰 L8).
+    // 남기는 것은 제공자·작업 종류·예외 클래스·HTTP 상태 코드·사유 코드·발생 위치뿐이다. 메시지·응답 원문·요청 본문·키는 남기지 않는다.
+    private function logProviderFailure(string $providerKey, string $operation, Throwable $e): void
+    {
+        Log::warning('AI 제공자 호출 실패', [
+            'provider' => $providerKey,
+            'operation' => $operation,
+            'exception' => $e::class,
+            'status' => $e instanceof AiProviderException ? $e->status : null,
+            'reason' => $e instanceof AiProviderException ? $e->reason : null,
+            'at' => basename($e->getFile()).':'.$e->getLine(),
+        ]);
     }
 
     // 소유자 조건을 직접 건다 — visibleTo()는 슈퍼관리자 전체 열람용(AiChatLogResource 조회 전용) 스코프라,
@@ -362,9 +409,13 @@ class AiChatService
             return;
         }
 
+        // 이미지 파일은 "실제로 쓰이고 있지 않을 때만" 지운다. 메시지 이미지("이 이미지 사용하기"로 팝업·배너·페이지에 적용한 것)와
+        // 카드 이미지가 그 레코드에서 아직 쓰이는데 대화 보관 기간이 지났다고 파일을 지우면 공개 화면의 이미지가 404 가 된다(리뷰 M1).
+        // 쓰임 여부는 제안/메시지 상태가 아니라 콘텐츠 레코드가 그 경로를 가리키는지로 직접 확인한다(사용 표시를 못 남긴 경우도 보호).
         AiChatMessage::whereIn('conversation_id', $expiredIds)
             ->whereNotNull('image_path')
             ->get()
+            ->reject(fn (AiChatMessage $message) => $this->imageInUse($message->image_path))
             ->each(fn (AiChatMessage $message) => $this->uploadService->delete($message->image_path));
 
         // 카드에서 만든 이미지 중 아직 어떤 레코드에도 쓰이지 않은 것(status != used)은 고아 파일이므로 함께 지운다.
@@ -374,9 +425,29 @@ class AiChatService
             ->whereNotNull('image_path')
             ->where('status', '!=', AiChatProposal::STATUS_USED)
             ->get()
+            ->reject(fn (AiChatProposal $proposal) => $this->imageInUse($proposal->image_path))
             ->each(fn (AiChatProposal $proposal) => $this->uploadService->delete($proposal->image_path));
 
         AiChatMessage::whereIn('conversation_id', $expiredIds)->delete();
         AiChatConversation::withTrashed()->whereIn('id', $expiredIds)->forceDelete();
+    }
+
+    /**
+     * 이 이미지 파일을 팝업·배너·페이지(AI 가 이미지를 채울 수 있는 화면 - AiFormFillSchema 의 image_field)가 쓰고 있는가.
+     * 소프트삭제된 레코드도 복구할 수 있으므로 DB 를 직접 조회한다(스코프 없음).
+     */
+    private function imageInUse(string $path): bool
+    {
+        $path = ltrim($path, '/');
+
+        foreach (AiFormFillSchema::SCREENS as $table => $definition) {
+            $column = $definition['image_field'];
+
+            if ($column !== null && DB::table($table)->where($column, $path)->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

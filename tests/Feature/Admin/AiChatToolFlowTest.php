@@ -2,16 +2,20 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\AdminAuditLog;
 use App\Models\AiChatConversation;
 use App\Models\AiChatMessage;
 use App\Models\AiChatProposal;
 use App\Models\AiChatUsage;
 use App\Models\User;
 use App\Services\Ai\AiLimitExceededException;
+use App\Services\Ai\AiUserFacingException;
 use App\Services\AiChatService;
 use App\Services\SiteSettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -36,7 +40,7 @@ class AiChatToolFlowTest extends TestCase
     // Http::fake() 를 다시 부르면 이전 가짜 응답 뒤에 "덧붙을" 뿐이라 먼저 등록한 응답이 계속 이긴다 - 새 팩토리로 바꿔 초기화한다.
     private function resetHttpFakes(): void
     {
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
     }
 
     private function useGemini(): void
@@ -135,7 +139,7 @@ class AiChatToolFlowTest extends TestCase
         Http::assertSentCount(1);
         $this->assertStringContainsString('AI 응답을 받아오지 못했습니다', $reply->content);
         $this->assertCount(0, $reply->proposals);
-        $log = \App\Models\AdminAuditLog::where('action', 'ai_chat')->first();
+        $log = AdminAuditLog::where('action', 'ai_chat')->first();
         $this->assertFalse($log->changes['success']);
     }
 
@@ -289,7 +293,7 @@ class AiChatToolFlowTest extends TestCase
         // 두 번째 호출은 이미 이미지가 있어 다시 만들지 않는다(비용 방지).
         $again = app(AiChatService::class)->generateProposalImage($admin, $proposal->id);
         $this->assertSame($ready->image_path, $again->image_path);
-        $this->assertSame(1, \App\Models\AiChatUsage::where('kind', 'image')->count());
+        $this->assertSame(1, AiChatUsage::where('kind', 'image')->count());
     }
 
     public function test_proposal_image_respects_the_image_limit_and_does_not_touch_the_proposal(): void
@@ -336,6 +340,7 @@ class AiChatToolFlowTest extends TestCase
         Storage::fake('uploads');
         Http::fake();
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         $admin = $this->admin();
         $service = app(AiChatService::class);
 
@@ -347,8 +352,8 @@ class AiChatToolFlowTest extends TestCase
         Storage::disk('uploads')->assertExists($ready->image_path);
 
         // 가짜 호출도 한도에 센다(브라우저로 한도 흐름을 비용 없이 확인하려고).
-        $this->assertSame(1, \App\Models\AiChatUsage::where('provider', 'fake')->where('kind', 'chat')->count());
-        $this->assertSame(1, \App\Models\AiChatUsage::where('provider', 'fake')->where('kind', 'image')->count());
+        $this->assertSame(1, AiChatUsage::where('provider', 'fake')->where('kind', 'chat')->count());
+        $this->assertSame(1, AiChatUsage::where('provider', 'fake')->where('kind', 'image')->count());
 
         Http::assertNothingSent();
     }
@@ -385,7 +390,7 @@ class AiChatToolFlowTest extends TestCase
 
     public function test_message_timestamps_use_the_app_timezone_not_the_database_default(): void
     {
-        \Illuminate\Support\Carbon::setTestNow(\Illuminate\Support\Carbon::create(2026, 10, 21, 14, 3, 0, 'Asia/Seoul'));
+        Carbon::setTestNow(Carbon::create(2026, 10, 21, 14, 3, 0, 'Asia/Seoul'));
         $admin = $this->admin();
         $conversation = AiChatConversation::create(['user_id' => $admin->id, 'provider' => 'gemini', 'title' => '시각']);
 
@@ -396,7 +401,8 @@ class AiChatToolFlowTest extends TestCase
 
     public function test_fake_provider_is_refused_outside_local(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        // 사용자에게 보여 줄 안내 예외다(예전 InvalidArgumentException 은 위젯에서 처리되지 않아 500 이 됐다 - 리뷰 M2).
+        $this->expectException(AiUserFacingException::class);
 
         app(AiChatService::class)->sendMessage($this->admin(), null, 'fake', '팝업 만들어줘');
     }

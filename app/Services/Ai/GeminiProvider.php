@@ -3,8 +3,8 @@
 namespace App\Services\Ai;
 
 use App\Services\SiteSettingService;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
-use RuntimeException;
 
 class GeminiProvider implements AiProviderContract
 {
@@ -35,14 +35,33 @@ class GeminiProvider implements AiProviderContract
         'SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'MALFORMED_FUNCTION_CALL', 'OTHER',
     ];
 
-    // "정책상 차단" - 결과가 없고 관리자가 표현을 바꾸면 해결되는 사유(IMAGE_* 는 이미지 모델의 사유 전부).
-    // 이 경우 AiBlockedException 으로 이유별 안내를 만들고 일일 한도를 소모하지 않는다(2026-10-21 실측: 단순한 아이콘 프롬프트가
+    // "정책상 차단" 허용 목록 - 제공자가 안전·저작권·금지 콘텐츠 정책 때문에 결과를 만들지 않았고 관리자가 표현을 바꾸면 해결되는 사유만.
+    // 이 코드일 때만 AiBlockedException 으로 이유별 안내를 만들고 일일 한도를 되돌려 준다(2026-10-21 실측: 단순한 아이콘 프롬프트가
     // HTTP 200 + 빈 content + finishReason IMAGE_RECITATION 으로 와서 "응답을 해석할 수 없습니다"라는 불친절한 오류가 됐다).
-    private const POLICY_FINISH_REASONS = [
-        'SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'NO_IMAGE',
+    //
+    // 2026-10-21 결정(사용자): 정책 차단 환불에 횟수 상한은 두지 않는다(내부용 도구라 인당 하루 한도만 있으면 충분). 대신 환불 대상은
+    // 이 명시 목록으로만 좁힌다 - 예전에는 `IMAGE_*` 접두 전부·"STOP 이 아닌 모든 사유"가 환불돼 IMAGE_OTHER·OTHER·MAX_TOKENS·NO_IMAGE 같은
+    // 일반 코드(제공자가 연산을 했을 수 있음)까지 한도를 소모하지 않았다. 목록에 없는 코드는 일반 실패로 처리하고 한도를 소모한다.
+    public const POLICY_REASONS = [
+        'IMAGE_RECITATION', 'RECITATION',
+        'IMAGE_SAFETY', 'SAFETY',
+        'IMAGE_PROHIBITED_CONTENT', 'PROHIBITED_CONTENT',
+        'BLOCKLIST', 'SPII',
     ];
 
     public function __construct(private readonly SiteSettingService $siteSettings) {}
+
+    // 응답의 사유 코드(finishReason·blockReason)를 대문자 문자열로(문자열이 아니면 빈 문자열).
+    private static function reasonCode(mixed $value): string
+    {
+        return is_string($value) ? strtoupper(trim($value)) : '';
+    }
+
+    // HTTP 오류 응답 → 상태 코드와 제공자의 error.status(예: NOT_FOUND·RESOURCE_EXHAUSTED)만 담은 예외. 원문 응답은 담지 않는다.
+    private function httpFailure(string $message, Response $response): AiProviderException
+    {
+        return new AiProviderException($message, $response->status(), AiProviderException::cleanReason($response->json('error.status')));
+    }
 
     public function key(): string
     {
@@ -105,15 +124,21 @@ class GeminiProvider implements AiProviderContract
             ->post(self::ENDPOINT.self::CHAT_MODEL.':generateContent', $body);
 
         if (! $response->successful()) {
-            throw new RuntimeException('Gemini 채팅 요청이 실패했습니다.');
+            throw $this->httpFailure('Gemini 채팅 요청이 실패했습니다.', $response);
         }
 
-        // 프롬프트 자체가 차단되면 candidates 가 없다 - 재시도 없이 정책 차단 안내.
-        if (filled($response->json('promptFeedback.blockReason'))) {
-            throw AiBlockedException::forChat((string) $response->json('promptFeedback.blockReason'));
+        // 프롬프트 자체가 차단되면 candidates 가 없다 - 허용 목록의 정책 사유면 재시도 없이 차단 안내, 그 밖의 사유는 일반 실패(한도 소모).
+        $blockReason = self::reasonCode($response->json('promptFeedback.blockReason'));
+
+        if ($blockReason !== '') {
+            if (in_array($blockReason, self::POLICY_REASONS, true)) {
+                throw AiBlockedException::forChat($blockReason);
+            }
+
+            throw new AiProviderException('Gemini 요청이 차단되었습니다.', $response->status(), AiProviderException::cleanReason($blockReason));
         }
 
-        $finishReason = (string) $response->json('candidates.0.finishReason', '');
+        $finishReason = self::reasonCode($response->json('candidates.0.finishReason'));
         $text = [];
         $calls = [];
 
@@ -140,13 +165,13 @@ class GeminiProvider implements AiProviderContract
 
         if ($joined === '' && $calls === []) {
             // 정책상 차단(안전·저작권 유사 등)은 이유별 안내로, 빈 후보 / MALFORMED_FUNCTION_CALL 은 일반 오류로 - 재시도하지 않는다.
-            if (in_array($finishReason, self::POLICY_FINISH_REASONS, true)) {
+            if (in_array($finishReason, self::POLICY_REASONS, true)) {
                 throw AiBlockedException::forChat($finishReason);
             }
 
-            throw new RuntimeException(in_array($finishReason, self::BLOCKING_FINISH_REASONS, true)
+            throw new AiProviderException(in_array($finishReason, self::BLOCKING_FINISH_REASONS, true)
                 ? 'Gemini 응답이 차단되었거나 도구 호출 형식이 잘못되었습니다.'
-                : 'Gemini 응답을 해석할 수 없습니다.');
+                : 'Gemini 응답을 해석할 수 없습니다.', $response->status(), AiProviderException::cleanReason($finishReason));
         }
 
         return new AiChatResult($joined, $calls);
@@ -163,7 +188,7 @@ class GeminiProvider implements AiProviderContract
             ]);
 
         if (! $response->successful()) {
-            throw new RuntimeException('Gemini 이미지 생성 요청이 실패했습니다.');
+            throw $this->httpFailure('Gemini 이미지 생성 요청이 실패했습니다.', $response);
         }
 
         // 응답 파트 중 inlineData 가 있는 첫 파트가 이미지다(텍스트 파트가 앞에 올 수 있다).
@@ -178,23 +203,27 @@ class GeminiProvider implements AiProviderContract
         $bytes = $inline === null ? false : base64_decode($inline['data'], true);
 
         if ($bytes === false || $bytes === '') {
-            // 한도 소모 기준(사용자 확정 2026-10-21):
-            //  - 정책상 차단 = HTTP 200 + 이미지 없음 + finishReason 이 비어 있지도 STOP 도 아님(IMAGE_RECITATION·RECITATION·IMAGE_SAFETY·
-            //    SAFETY·PROHIBITED_CONTENT 등), 또는 프롬프트 자체 차단(promptFeedback.blockReason) → 이유별 안내(사유 코드만, finishMessage·
-            //    원문 응답·키는 노출 금지)를 보여 주고 **하루 이미지 한도를 소모하지 않는다**(AiChatService 가 선기록한 사용 한 줄을 되돌린다).
-            //  - 5xx·타임아웃·연결 오류(위 successful() 검사에서 RuntimeException)와 STOP 인데 이미지가 없는 응답은 비용이 들었을 수 있어
-            //    **소모한다**(java-cms 와 같은 기준).
-            $finishReason = (string) $response->json('candidates.0.finishReason', '');
+            // 한도 소모 기준(사용자 확정 2026-10-21, 같은 날 "명시 목록만 환불"로 좁힘):
+            //  - 정책상 차단 = HTTP 200 + 이미지 없음 + finishReason(또는 프롬프트 차단 사유 promptFeedback.blockReason)이 POLICY_REASONS
+            //    허용 목록의 정책 거절 코드(IMAGE_RECITATION·RECITATION·IMAGE_SAFETY·SAFETY·PROHIBITED_CONTENT·BLOCKLIST·SPII 등) → 이유별
+            //    안내(사유 코드만, finishMessage·원문 응답·키는 노출 금지)를 보여 주고 **하루 이미지 한도를 소모하지 않는다**(AiChatService 가
+            //    선기록한 사용 한 줄을 되돌린다).
+            //  - 그 밖의 모든 경우는 **소모한다**: 5xx·타임아웃·연결 오류(위 successful() 검사), STOP 인데 이미지가 없는 응답, 그리고 목록에 없는
+            //    코드(IMAGE_OTHER·OTHER·NO_IMAGE·MAX_TOKENS 등 - 정책 거절이라고 단정할 수 없고 제공자가 연산했을 수 있다).
+            $blockReason = self::reasonCode($response->json('promptFeedback.blockReason'));
+            $finishReason = self::reasonCode($response->json('candidates.0.finishReason'));
 
-            if (filled($response->json('promptFeedback.blockReason'))) {
-                throw AiBlockedException::forImage((string) $response->json('promptFeedback.blockReason'));
+            foreach ([$blockReason, $finishReason] as $reason) {
+                if (in_array($reason, self::POLICY_REASONS, true)) {
+                    throw AiBlockedException::forImage($reason);
+                }
             }
 
-            if ($finishReason !== '' && $finishReason !== 'STOP') {
-                throw AiBlockedException::forImage($finishReason);
-            }
-
-            throw new RuntimeException('Gemini 이미지 응답을 해석할 수 없습니다.');
+            throw new AiProviderException(
+                'Gemini 이미지 응답을 해석할 수 없습니다.',
+                $response->status(),
+                AiProviderException::cleanReason($blockReason !== '' ? $blockReason : $finishReason),
+            );
         }
 
         // 확장자는 응답 MIME 으로 정한다(Gemini 이미지 모델은 JPEG 도 돌려준다). AiChatService 가 이 확장자를 그대로 쓴다.

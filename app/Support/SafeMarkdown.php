@@ -73,6 +73,8 @@ final class SafeMarkdown
                 'html_input' => 'escape',
                 'allow_unsafe_links' => false,
                 'max_nesting_level' => 20,
+                // 한 줄에 서식 기호(*·_·` 등)가 수천 개 있는 모델 출력으로 파서가 오래 걸리지 않게(기본값은 제한 없음 - 리뷰 L4).
+                'max_delimiters_per_line' => 200,
                 // 모델 답은 문단 안의 줄바꿈을 한 번의 개행으로만 주는 일이 많다 - 그대로 줄바꿈으로 보이게 한다.
                 'renderer' => ['soft_break' => "<br />\n"],
             ]);
@@ -110,9 +112,11 @@ final class SafeMarkdown
                 /** @var Link $node */
                 $children = $childRenderer->renderNodes($node->children());
                 $url = trim($node->getUrl());
-                $host = preg_match('#^https?://#i', $url) ? parse_url($url, PHP_URL_HOST) : null;
+                // 호스트는 서버와 브라우저가 같게 읽는 주소에서만 얻는다(`https://evil.com\@bank.com/` 처럼 title 에 보이는 도메인을
+                // 위장하는 주소는 링크로 쓰지 않고 글자만 남긴다 - AiText::httpHost, 리뷰 L3).
+                $host = AiText::httpHost($url);
 
-                if (! $this->allowLinks || ! is_string($host) || $host === '' || preg_match('/[\s\x00-\x1f]/', $url)) {
+                if (! $this->allowLinks || $host === null) {
                     return $children; // 글자만
                 }
 

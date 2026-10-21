@@ -137,7 +137,7 @@ class AiProviderToolsTest extends TestCase
 
             try {
                 $this->gemini()->chatWithTools('', self::HISTORY, $this->tools());
-                $this->fail("예외가 나야 합니다: ".json_encode($body));
+                $this->fail('예외가 나야 합니다: '.json_encode($body));
             } catch (RuntimeException) {
                 $this->addToAssertionCount(1);
             }
@@ -219,8 +219,18 @@ class AiProviderToolsTest extends TestCase
 
     // ───────────── 개발용 가짜 제공자 ─────────────
 
-    public function test_fake_provider_exists_only_in_local_environment(): void
+    public function test_fake_provider_exists_only_in_local_environment_with_the_explicit_flag(): void
     {
+        $this->assertArrayNotHasKey('fake', app(AiChatService::class)->availableProviders());
+
+        // 리뷰 L7: APP_ENV=local 만으로는 켜지지 않는다(운영에 APP_ENV=local 이 잘못 들어가도 키 없이 위젯이 노출되지 않게).
+        $this->app['env'] = 'local';
+        $this->assertFalse(config('services.ai.fake_provider'), '플래그 기본값은 꺼짐');
+        $this->assertArrayNotHasKey('fake', app(AiChatService::class)->availableProviders());
+
+        // 플래그만 켜고 환경이 local 이 아니어도 켜지지 않는다.
+        $this->app['env'] = 'production';
+        config(['services.ai.fake_provider' => true]);
         $this->assertArrayNotHasKey('fake', app(AiChatService::class)->availableProviders());
 
         $this->app['env'] = 'local';

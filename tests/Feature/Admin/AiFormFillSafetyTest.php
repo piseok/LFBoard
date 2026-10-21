@@ -7,7 +7,9 @@ use App\Filament\Resources\Popups\Pages\CreatePopup;
 use App\Filament\Resources\Posts\Pages\CreatePost;
 use App\Models\Board;
 use App\Models\Inquiry;
+use App\Models\Post;
 use App\Models\User;
+use Database\Seeders\LanguageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -44,7 +46,7 @@ class AiFormFillSafetyTest extends TestCase
     // 그 내용이 저장되는지 - 이벤트 → 폼 상태 → 사람이 저장 버튼(create) 의 전체 흐름.
     public function test_widget_event_fills_the_rich_editor_and_the_human_save_persists_it(): void
     {
-        $this->seed(\Database\Seeders\LanguageSeeder::class);
+        $this->seed(LanguageSeeder::class);
         $board = Board::create(['name' => 'B', 'slug' => 'b', 'locale' => 'ko', 'skin' => 'default', 'is_active' => true, 'use_editor' => true]);
         $this->actingAs($this->admin());
 
@@ -62,7 +64,7 @@ class AiFormFillSafetyTest extends TestCase
         // 사람이 게시판을 고르고 저장 버튼을 눌러야만 저장된다.
         $page->fillForm(['board_id' => $board->id])->call('create')->assertHasNoFormErrors();
 
-        $post = \App\Models\Post::firstOrFail();
+        $post = Post::firstOrFail();
         $this->assertSame('AI 제목', $post->title);
         $this->assertStringContainsString('<strong>굵게</strong>', $post->content);
         $this->assertStringContainsString('<li>하나</li>', $post->content);

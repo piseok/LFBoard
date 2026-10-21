@@ -4,8 +4,8 @@ namespace App\Services;
 
 use App\Models\AdminAuditLog;
 use App\Models\AiChatProposal;
-use App\Models\Banner;
 use App\Models\BannedWord;
+use App\Models\Banner;
 use App\Models\Board;
 use App\Models\EmailTemplate;
 use App\Models\Inquiry;
@@ -18,6 +18,7 @@ use App\Models\Popup;
 use App\Models\Post;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 // 관리자 패널에서 생성/수정/삭제한 콘텐츠의 변경 이력을 남긴다. 리소스마다 따로 훅을 심지 않고,
@@ -165,7 +166,7 @@ class AdminAuditLogService
 
             // forceDeleted 이벤트는 SoftDeletes를 쓰는 모델에만 존재한다(Page/Inquiry/Post/User) —
             // 안 쓰는 모델(Board 등)에 그대로 걸면 "undefined method" 에러가 난다.
-            if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($modelClass), true)) {
+            if (in_array(SoftDeletes::class, class_uses_recursive($modelClass), true)) {
                 $modelClass::forceDeleted(fn (Model $model) => $this->record('deleted', $model));
             }
         }

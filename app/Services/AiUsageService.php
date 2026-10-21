@@ -16,9 +16,13 @@ use Illuminate\Support\Facades\Cache;
 //  - 경쟁 방어: 제공자를 부르기 "직전에" 먼저 한 줄을 적고 → 오늘 건수를 센 뒤 → 한도를 넘었으면 그 줄을 지우고 거절한다.
 //    관리자별로 동시에 1건만 처리한다(Cache::lock). 사이트 전체 합계는 동시 요청에서 더 엄격한 쪽으로만 틀린다.
 //  - 0 = 해당 종류를 쓰지 않음(차단). 무제한은 없다(비용 안전). 값이 비었거나 숫자가 아니면 기본값을 쓴다.
-//  - 소모 기준(사용자 확정 2026-10-21, java-cms 와 같은 기준): 제공자가 "정책상 결과를 만들지 않은" 차단 응답(HTTP 200 + 결과 없음 +
-//    finishReason 이 STOP 이 아님 - IMAGE_RECITATION·SAFETY 등)은 한도를 소모하지 않는다 - 선기록한 줄을 AiUsageReservation::refund() 로
-//    되돌린다(호출자: AiChatService). 5xx·타임아웃·연결 오류·형식 오류는 제공자 쪽에서 비용이 들었을 수 있어 소모한다(되돌리지 않음).
+//  - 소모 기준(사용자 확정 2026-10-21): 제공자가 "정책상 결과를 만들지 않은" 차단 응답 - 명시 허용 목록(GeminiProvider::POLICY_REASONS:
+//    IMAGE_RECITATION·RECITATION·IMAGE_SAFETY·SAFETY·PROHIBITED_CONTENT·IMAGE_PROHIBITED_CONTENT·BLOCKLIST·SPII, OpenAI 는 content_filter·
+//    content_policy_violation·moderation_blocked)의 사유일 때만 한도를 소모하지 않는다 - 선기록한 줄을 AiUsageReservation::refund() 로
+//    되돌린다(호출자: AiChatService). IMAGE_OTHER·OTHER·NO_IMAGE 같은 일반 코드와 5xx·타임아웃·연결 오류·형식 오류는 제공자 쪽에서
+//    비용이 들었을 수 있어 소모한다(되돌리지 않음).
+//  - 환불 횟수 상한은 두지 않는다(사용자 결정 2026-10-21: 내부용 도구라 인당 하루 한도만 있으면 충분). 정책 거절만 계속 반복해도 하루 한도에는
+//    안 걸리고 관리자별 동시 1건 잠금만이 속도 제한이 된다는 점은 알고 받아들인 것이다(리뷰 M3 의 환불 횟수 상한 제안은 채택하지 않음).
 //  - 제공자 크레딧 잔액은 조회 수단이 없어 보여 주지 않는다 - 화면에는 "우리 사이트의 일일 한도 기준"이라고 쓴다.
 class AiUsageService
 {

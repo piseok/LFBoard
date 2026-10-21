@@ -37,6 +37,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Throwable;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -117,9 +118,23 @@ class AdminPanelProvider extends PanelProvider
             // 관리자 패널 전역에 항상 떠 있는 AI 비서 위젯(퀵메뉴). 로그인 전(예: 로그인 화면)에는
             // 아예 렌더링하지 않고, 로그인 후에는 위젯 자체의 mount()가 권한/설정 여부에 따라
             // 내용을 비워 보이지 않게 처리한다.
+            // 위젯 장애(코드가 migrate 보다 먼저 배포돼 ai_chat_usage 표가 아직 없거나, DB 순간 장애)가 모든 관리자 화면을 500 으로
+            // 만들지 않게 이 훅에서 잡는다 - report() 로 기록만 하고 위젯만 빠진 채 화면은 정상 표시한다(리뷰 M4).
             ->renderHook(
                 PanelsRenderHook::BODY_END,
-                fn () => auth()->check() ? Blade::render('<livewire:ai-chat-widget />') : '',
+                function () {
+                    if (! auth()->check()) {
+                        return '';
+                    }
+
+                    try {
+                        return Blade::render('<livewire:ai-chat-widget />');
+                    } catch (Throwable $e) {
+                        report($e);
+
+                        return '';
+                    }
+                },
             )
             // Filament 코어 CSS 위에 얹는 소규모 보정(토글 필드 세로 중앙 정렬 등) — 빌드 도구 없이
             // public/css/admin-custom.css 하나만 <head>에 추가한다.

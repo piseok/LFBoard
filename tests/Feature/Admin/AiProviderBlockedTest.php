@@ -8,14 +8,15 @@ use App\Models\AiChatProposal;
 use App\Models\AiChatUsage;
 use App\Models\User;
 use App\Services\Ai\AiBlockedException;
-use App\Services\Ai\AiToolCall;
+use App\Services\Ai\AiProviderException;
 use App\Services\Ai\FakeChatProvider;
 use App\Services\Ai\GeminiProvider;
 use App\Services\Ai\OpenAiProvider;
 use App\Services\AiChatService;
-use App\Services\Ai\AiProposalService;
 use App\Services\SiteSettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -49,7 +50,7 @@ class AiProviderBlockedTest extends TestCase
     private function fakeGemini(array $candidate): void
     {
         app(SiteSettingService::class)->set('ai_gemini_api_key', 'gm-SECRET-KEY', 'ai');
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['candidates' => [$candidate]])]);
     }
 
@@ -91,8 +92,8 @@ class AiProviderBlockedTest extends TestCase
             'PROHIBITED_CONTENT' => '안전 정책',
             'IMAGE_PROHIBITED_CONTENT' => '안전 정책',
             'RECITATION' => '저작물',
-            'IMAGE_OTHER' => '정책상 생성되지 않았습니다(IMAGE_OTHER)',
-            'NO_IMAGE' => '정책상 생성되지 않았습니다(NO_IMAGE)',
+            'BLOCKLIST' => '안전 정책',
+            'SPII' => '안전 정책',
         ];
 
         foreach ($cases as $reason => $expected) {
@@ -114,17 +115,68 @@ class AiProviderBlockedTest extends TestCase
         $this->assertStringNotContainsString('<script', $e->getMessage());
     }
 
-    // 사용자 확정 기준: HTTP 200 + 이미지 없음 + finishReason 이 STOP 이 아니면 차단(한도 미소모) - 사유가 IMAGE_* 가 아니어도 마찬가지.
-    public function test_any_non_stop_finish_reason_without_an_image_is_a_blocked_response(): void
+    // 사용자 결정(2026-10-21): 환불은 `IMAGE_*` 접두 전부·"STOP 이 아닌 모든 사유"가 아니라 명시 허용 목록(POLICY_REASONS)의 정책 거절 코드만.
+    // IMAGE_OTHER·OTHER·NO_IMAGE·MAX_TOKENS 같은 일반 코드는 정책 거절이라고 단정할 수 없고 제공자가 연산했을 수 있어 일반 실패(한도 소모)다.
+    public function test_only_explicit_policy_codes_are_blocked_and_generic_codes_are_plain_failures(): void
     {
-        foreach (['MAX_TOKENS', 'OTHER', 'FINISH_REASON_UNSPECIFIED', 'LANGUAGE'] as $reason) {
+        foreach (['IMAGE_RECITATION', 'RECITATION', 'IMAGE_SAFETY', 'SAFETY', 'PROHIBITED_CONTENT', 'IMAGE_PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'] as $reason) {
+            $this->assertContains($reason, GeminiProvider::POLICY_REASONS);
+        }
+        $this->assertCount(8, GeminiProvider::POLICY_REASONS, '허용 목록은 실제 정책 거절 8개로 고정');
+
+        foreach (['IMAGE_OTHER', 'OTHER', 'NO_IMAGE', 'MAX_TOKENS', 'FINISH_REASON_UNSPECIFIED', 'LANGUAGE', 'IMAGE_SOMETHING_NEW'] as $reason) {
             $this->fakeGemini(['content' => [], 'finishReason' => $reason]);
 
             try {
                 $this->gemini()->generateImage('x');
-                $this->fail("{$reason} 는 차단 예외여야 합니다");
-            } catch (AiBlockedException $e) {
-                $this->assertSame($reason, $e->reasonCode);
+                $this->fail("{$reason} 는 일반 실패여야 합니다");
+            } catch (AiBlockedException) {
+                $this->fail("{$reason} 를 정책 차단으로 분류하면 한도가 환불된다");
+            } catch (AiProviderException $e) {
+                $this->assertSame($reason, $e->reason);
+                $this->assertStringContainsString('해석할 수 없습니다', $e->getMessage());
+            }
+        }
+    }
+
+    public function test_generic_image_code_is_not_refunded_but_a_policy_code_is(): void
+    {
+        Storage::fake('uploads');
+        $admin = $this->admin();
+
+        // 일반 코드(IMAGE_OTHER): 일반 실패 문구 + 한도 소모.
+        $this->fakeGemini(['content' => [], 'finishReason' => 'IMAGE_OTHER']);
+        $generic = app(AiChatService::class)->generateImage($admin, null, 'gemini', '아이콘');
+        $this->assertStringContainsString('이미지 생성에 실패했습니다', $generic->content);
+        $this->assertSame(1, AiChatUsage::where('kind', 'image')->count(), 'IMAGE_OTHER 는 환불하지 않는다');
+
+        // 정책 거절 코드(IMAGE_SAFETY): 안내 + 한도 미소모.
+        $this->fakeGemini(['content' => [], 'finishReason' => 'IMAGE_SAFETY']);
+        $blocked = app(AiChatService::class)->generateImage($admin, $generic->conversation_id, 'gemini', '아이콘 2');
+        $this->assertStringContainsString('(IMAGE_SAFETY)', $blocked->content);
+        $this->assertSame(1, AiChatUsage::where('kind', 'image')->count(), 'IMAGE_SAFETY 는 환불한다');
+
+        // 환불 횟수 상한은 없다(사용자 결정) - 정책 거절을 계속 받아도 인당 한도는 그대로.
+        for ($i = 0; $i < 6; $i++) {
+            $this->fakeGemini($this->recitation());
+            app(AiChatService::class)->generateImage($admin, $generic->conversation_id, 'gemini', "반복 {$i}");
+        }
+        $this->assertSame(1, AiChatUsage::where('kind', 'image')->count());
+    }
+
+    public function test_prompt_level_block_reason_outside_the_allowlist_is_a_plain_failure(): void
+    {
+        app(SiteSettingService::class)->set('ai_gemini_api_key', 'gm-SECRET-KEY', 'ai');
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['promptFeedback' => ['blockReason' => 'OTHER']])]);
+
+        foreach (['generateImage', 'chat'] as $method) {
+            try {
+                $method === 'chat' ? $this->gemini()->chat([['role' => 'user', 'content' => 'x']]) : $this->gemini()->generateImage('x');
+                $this->fail('예외가 나야 합니다');
+            } catch (AiBlockedException) {
+                $this->fail('OTHER 는 정책 차단으로 분류하면 안 된다');
+            } catch (AiProviderException $e) {
+                $this->assertSame('OTHER', $e->reason);
             }
         }
     }
@@ -197,7 +249,7 @@ class AiProviderBlockedTest extends TestCase
             $this->assertSame('CONTENT_FILTER', $e->reasonCode);
         }
 
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(['api.openai.com/v1/images/generations' => Http::response(['error' => ['code' => 'content_policy_violation', 'message' => 'raw provider text']], 400)]);
         try {
             $openai->generateImage('x');
@@ -207,7 +259,7 @@ class AiProviderBlockedTest extends TestCase
             $this->assertStringNotContainsString('raw provider text', $e->getMessage());
         }
 
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(['api.openai.com/v1/images/generations' => Http::response(['error' => ['code' => 'rate_limit_exceeded']], 429)]);
         $this->expectException(RuntimeException::class);
         try {
@@ -240,7 +292,7 @@ class AiProviderBlockedTest extends TestCase
 
         // 한도가 1장이어도 차단 뒤에 정상 생성이 가능하다.
         $png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['candidates' => [['content' => ['parts' => [['inlineData' => ['mimeType' => 'image/png', 'data' => $png]]]]]]])]);
         $ok = app(AiChatService::class)->generateImage($admin, $message->conversation_id, 'gemini', '다른 표현의 아이콘');
         $this->assertNotNull($ok->image_path);
@@ -258,12 +310,12 @@ class AiProviderBlockedTest extends TestCase
         $scenarios = [
             'HTTP 500' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['error' => 'boom'], 500)]),
             'HTTP 503' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => Http::response([], 503)]),
-            '타임아웃' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => fn () => throw new \Illuminate\Http\Client\ConnectionException('timeout')]),
+            '타임아웃' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => fn () => throw new ConnectionException('timeout')]),
             'STOP 인데 이미지 없음' => fn () => Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => '못 만들었어요']]], 'finishReason' => 'STOP']]])]),
         ];
 
         foreach ($scenarios as $label => $arrange) {
-            Http::swap(new \Illuminate\Http\Client\Factory);
+            Http::swap(new Factory);
             $arrange();
 
             $message = app(AiChatService::class)->generateImage($admin, $conversationId, 'gemini', '아이콘');
@@ -340,6 +392,7 @@ class AiProviderBlockedTest extends TestCase
     public function test_widget_shows_the_blocked_message_for_a_card_image_and_leaves_the_counts_alone(): void
     {
         $this->app['env'] = 'local';
+        config(['services.ai.fake_provider' => true]);
         $admin = $this->admin();
         $this->actingAs($admin);
         // 가짜 제공자의 팝업 카드 이미지 프롬프트에는 "차단"이 없으므로, 카드의 프롬프트를 차단 유도 문구로 바꿔 둔다.

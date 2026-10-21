@@ -34,7 +34,7 @@ final class AiText
         return mb_substr($text, 0, $max);
     }
 
-    // http/https 이고 호스트가 있는 URL 만 통과(javascript:, data:, 상대경로 등은 버린다).
+    // http/https 이고 호스트가 있는 URL 만 통과(javascript:, data:, 상대경로 등은 버린다). 호스트가 모호한 주소(아래 httpHost)도 버린다.
     public static function httpUrl(mixed $value, int $max = 255): ?string
     {
         $url = self::singleLine($value, $max + 1);
@@ -43,7 +43,7 @@ final class AiText
             return null;
         }
 
-        if (filter_var($url, FILTER_VALIDATE_URL) === false || blank(parse_url($url, PHP_URL_HOST))) {
+        if (filter_var($url, FILTER_VALIDATE_URL) === false || self::httpHost($url) === null) {
             return null;
         }
 
@@ -51,19 +51,49 @@ final class AiText
     }
 
     /**
-     * 정수 인자 - 숫자 문자열도 받되 범위를 벗어나면 null.
+     * http/https 주소의 호스트 - 서버(PHP parse_url)와 브라우저가 같은 호스트로 읽는 주소일 때만(아니면 null).
+     * 채팅 링크의 title 에 "도메인 표시"로 호스트를 보여 주는데, 브라우저는 `\` 를 `/` 처럼 취급하고 authority 의 `user@` 는 접속
+     * 호스트로 보지 않아서 `https://evil.com\@bank.com/` 같은 주소를 PHP 는 bank.com 으로, 브라우저는 evil.com 으로 읽는다(호스트 위장,
+     * 리뷰 L3). 그래서 백슬래시·공백·제어문자가 있거나 authority 에 `@`(userinfo)가 있는 주소는 아예 링크로 쓰지 않는다.
+     */
+    public static function httpHost(string $url): ?string
+    {
+        $url = trim($url);
+
+        if (! preg_match('#^https?://([^/?\#]*)#i', $url, $match) || $match[1] === '') {
+            return null;
+        }
+
+        if (str_contains($url, '\\') || str_contains($match[1], '@') || preg_match('/[\s\x00-\x1f\x7f]/', $url)) {
+            return null;
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+
+        return is_string($host) && $host !== '' ? $host : null;
+    }
+
+    /**
+     * 정수 인자 - 숫자 문자열도 받되 범위를 벗어나면 null. 소수·무한대·NaN 은 받지 않는다(범위를 먼저 확인한 뒤에만 int 로 바꾼다 -
+     * 예전에는 INF·2^64 가 (int) 변환으로 0, 즉 "오늘"이 됐다. 리뷰 L6).
      */
     public static function intInRange(mixed $value, int $min, int $max): ?int
     {
         if (is_string($value) && preg_match('/^-?\d+$/', trim($value))) {
-            $value = (int) trim($value);
+            $value = (int) trim($value); // 아주 큰 숫자 문자열은 PHP_INT_MAX 로 포화되어 아래 범위 검사에서 걸린다.
         }
 
-        if (! is_int($value) && ! (is_float($value) && floor($value) === $value)) {
+        if (is_float($value)) {
+            if (! is_finite($value) || floor($value) !== $value || $value < $min || $value > $max) {
+                return null;
+            }
+
+            return (int) $value;
+        }
+
+        if (! is_int($value)) {
             return null;
         }
-
-        $value = (int) $value;
 
         return ($value >= $min && $value <= $max) ? $value : null;
     }

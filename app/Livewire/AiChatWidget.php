@@ -5,18 +5,18 @@ namespace App\Livewire;
 use App\Models\AiChatConversation;
 use App\Models\AiChatMessage;
 use App\Models\User;
-use App\Services\Ai\AiBusyException;
 use App\Services\Ai\AiFormFillSchema;
-use App\Services\Ai\AiLimitExceededException;
 use App\Services\Ai\AiProposalService;
+use App\Services\Ai\AiUserFacingException;
 use App\Services\AiChatService;
 use App\Services\AiUsageService;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection as SupportCollection;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Component;
-use RuntimeException;
+use Throwable;
 
 // 관리자 패널 전역에 떠 있는 AI 비서 채팅 위젯(AdminPanelProvider의 renderHook으로 모든 페이지에
 // 항상 렌더링됨). 대화 기록은 로그인한 관리자 본인 것만 조회한다 — 슈퍼관리자의 전체 열람/삭제는
@@ -82,9 +82,33 @@ class AiChatWidget extends Component
         return $user;
     }
 
+    // 서비스 호출 중 생긴 예외를 관리자에게 보여 줄 안내로 바꾼다. 서버가 쓴 안내(AiUserFacingException - 한도·진행 중·정책 차단·제안 만료 등)만
+    // 메시지를 그대로 보여 준다. 그 밖의 예외는 RuntimeException 계열이라도 보여 주지 않는다 - QueryException·RecordsNotFoundException 같은
+    // 것의 메시지에는 SQL 문구가 들어 있고, 처리되지 않으면 500 이 되므로 report() 한 뒤 일반 문구로 바꾼다(리뷰 M2).
+    private function noticeFor(Throwable $e): string
+    {
+        if ($e instanceof AiUserFacingException) {
+            return $e->getMessage();
+        }
+
+        if ($e instanceof ModelNotFoundException) {
+            // 다른 탭에서 지운 대화 등 - 보던 대화를 놓고 새 대화로 시작하게 한다.
+            $this->activeConversationId = null;
+
+            return __('대화를 찾을 수 없습니다. 새 대화로 시작해주세요.');
+        }
+
+        report($e);
+
+        return __('AI 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
     /** @return Collection<int, AiChatConversation> */
     public function conversations(): Collection
     {
+        // 권한을 박탈당한 관리자가 브라우저에서 $wire.conversations() 로 직접 부르지 못하게 - 렌더 중에는 이미 $showable 로 걸러진다(리뷰 L7).
+        $this->requireUser();
+
         return AiChatConversation::query()
             ->where('user_id', auth()->id())
             ->latest('id')
@@ -94,6 +118,8 @@ class AiChatWidget extends Component
 
     public function messages(): Collection|SupportCollection
     {
+        $this->requireUser();
+
         if (! $this->activeConversationId) {
             return collect();
         }
@@ -126,6 +152,7 @@ class AiChatWidget extends Component
 
     public function selectConversation(int $id): void
     {
+        $this->requireUser();
         $this->activeConversationId = AiChatConversation::query()->where('user_id', auth()->id())->whereKey($id)->value('id');
         $this->notice = null;
         $this->dispatch('ai-chat-refresh');
@@ -141,6 +168,8 @@ class AiChatWidget extends Component
 
     public function deleteConversation(int $id): void
     {
+        $this->requireUser();
+
         AiChatConversation::query()->where('user_id', auth()->id())->findOrFail($id)->delete();
 
         if ($this->activeConversationId === $id) {
@@ -180,9 +209,9 @@ class AiChatWidget extends Component
             $message = $this->mode === 'image'
                 ? $service->generateImage($user, $this->activeConversationId, $this->selectedProvider, $prompt)
                 : $service->sendMessage($user, $this->activeConversationId, $this->selectedProvider, $prompt, $this->screenPath);
-        } catch (AiLimitExceededException|AiBusyException $e) {
+        } catch (Throwable $e) {
             // 입력한 글은 그대로 둔다(한도가 풀리거나 이전 요청이 끝나면 다시 보낼 수 있게).
-            $this->notice = $e->getMessage();
+            $this->notice = $this->noticeFor($e);
 
             return;
         }
@@ -248,8 +277,8 @@ class AiChatWidget extends Component
 
         try {
             $proposal = app(AiChatService::class)->generateProposalImage($user, $proposalId);
-        } catch (AiLimitExceededException|AiBusyException|RuntimeException $e) {
-            $this->notice = $e->getMessage();
+        } catch (Throwable $e) {
+            $this->notice = $this->noticeFor($e);
 
             return;
         }
@@ -296,13 +325,16 @@ class AiChatWidget extends Component
         $user = auth()->user();
         $usage = app(AiUsageService::class);
         $showable = $this->providers !== [] && $this->canUse($user);
+        // 패널이 닫혀 있으면 대화·사용량을 아예 계산하지 않는다 - 이 위젯은 모든 관리자 화면에 렌더되므로 닫힌 상태에서까지
+        // 매 페이지 COUNT 쿼리 4개를 돌릴 이유가 없다(리뷰 M4). 사용량 숫자는 열린 패널(blade 의 $isOpen 분기)에서만 쓴다.
+        $open = $showable && $this->isOpen;
 
         return view('livewire.ai-chat-widget', [
             'showable' => $showable,
-            'conversations' => $showable && $this->isOpen ? $this->conversations() : collect(),
-            'messages' => $showable && $this->isOpen ? $this->messages() : collect(),
-            'chatUsage' => $showable ? $usage->status($user, AiUsageService::KIND_CHAT) : null,
-            'imageUsage' => $showable ? $usage->status($user, AiUsageService::KIND_IMAGE) : null,
+            'conversations' => $open ? $this->conversations() : collect(),
+            'messages' => $open ? $this->messages() : collect(),
+            'chatUsage' => $open ? $usage->status($user, AiUsageService::KIND_CHAT) : null,
+            'imageUsage' => $open ? $usage->status($user, AiUsageService::KIND_IMAGE) : null,
             'fillFields' => $this->targetTextFields(),
             'imageField' => $this->targetImageField(),
             'screenLabel' => AiFormFillSchema::detect($this->screenPath)['label'] ?? null,

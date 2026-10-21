@@ -17,11 +17,11 @@ use App\Models\Post;
 use App\Models\User;
 use App\Services\Ai\AiProposalService;
 use App\Services\Ai\AiToolCall;
+use Database\Seeders\LanguageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
-use Database\Seeders\LanguageSeeder;
 use Livewire\Livewire;
 use Tests\TestCase;
 

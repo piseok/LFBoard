@@ -35,6 +35,13 @@ return [
         ],
     ],
 
+    // AI 비서. API 키는 .env 가 아니라 관리자 > 사이트 설정 > AI 연동 탭(SiteSettings)에서 관리한다.
+    // fake_provider: 개발용 가짜 제공자(유료 API 를 부르지 않고 도구 호출·카드·한도 흐름을 브라우저로 확인)를 목록에 넣을지.
+    // APP_ENV=local 이고 이 값이 true 일 때만 켜진다(AiChatService::fakeProviderEnabled) - 환경 이름 하나만으로는 켜지지 않는다.
+    'ai' => [
+        'fake_provider' => filter_var(env('AI_FAKE_PROVIDER', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     // 소셜 로그인(google/kakao/naver) 설정은 .env가 아니라 관리자 > 사이트 설정 > 소셜 로그인 탭(SiteSettings)에서
     // 관리하며, App\Http\Controllers\Auth\SocialLoginController가 요청 시점에 이 배열에 값을 주입한다.
 

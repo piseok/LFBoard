@@ -128,7 +128,7 @@ final class AiFormFillSchema
             && str_starts_with($path, self::IMAGE_PREFIX)
             && ! str_contains($path, '..')
             && ! str_contains($path, '\\')
-            && preg_match('#^[A-Za-z0-9_./\-]+$#', $path) === 1;
+            && preg_match('#^[A-Za-z0-9_./\-]+\z#', $path) === 1; // `$` 는 끝의 개행 하나를 허용하므로 \z (리뷰 L5)
     }
 
     // AI 답변(마크다운 텍스트)을 해당 필드 형식에 맞는 값으로 바꾼다. 허용 필드가 아니면 null.

@@ -5,7 +5,7 @@ namespace App\Services\Ai;
 use RuntimeException;
 
 // 개발용 가짜 제공자(local 환경 전용) - 유료 API 를 부르지 않고도 도구 호출·행동 카드·한도·잔여량·마크다운
-// 흐름 전체를 브라우저로 확인하기 위한 것이다. AiChatService::providers() 가 app()->environment('local') 일 때만
+// 흐름 전체를 브라우저로 확인하기 위한 것이다. AiChatService::fakeProviderEnabled() 가 app()->environment('local') && .env 의 AI_FAKE_PROVIDER=true 일 때만
 // 목록에 넣는다(운영/시험에서는 나오지 않음). 응답은 결정적이다(같은 입력 → 같은 출력):
 //
 //   메시지에 "오류"      → 제공자 오류 흉내(예외)

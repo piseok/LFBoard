@@ -7,7 +7,8 @@ use RuntimeException;
 // 제공자가 "정책상" 응답을 만들지 않았다는 신호(저작권 유사·안전·금지 콘텐츠 등). 실패(네트워크·형식 오류)와 달리 관리자가 요청 표현을
 // 바꾸면 해결되는 일이라 이유별 안내 문구를 만들어 그대로 보여 준다. 사유 코드(예: IMAGE_RECITATION)만 노출하고, 제공자의 원문 응답·
 // finishMessage·키는 절대 노출하지 않는다(코드는 [A-Z_] 만 통과시킨다). 차단된 호출은 만들어진 결과가 없으므로 일일 한도를 소모하지 않는다
-// (AiChatService 가 사용 기록을 되돌린다).
+// (AiChatService 가 사용 기록을 되돌린다). 이 예외를 던지는 쪽은 사유 코드를 명시 허용 목록(GeminiProvider::POLICY_REASONS 등)에서 확인한
+// 뒤에만 던져야 한다 - 목록에 없는 일반 코드(IMAGE_OTHER 등)를 이 예외로 바꾸면 한도가 환불된다.
 class AiBlockedException extends RuntimeException
 {
     public function __construct(public readonly string $reasonCode, public readonly string $kind, string $message)

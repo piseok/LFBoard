@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\AdminAuditLog;
 use App\Models\AiChatConversation;
 use App\Models\AiChatMessage;
 use App\Models\AiChatProposal;
@@ -348,7 +349,7 @@ class AiProposalServiceTest extends TestCase
 
         // 두 번째 호출은 열 수 없는 상태(used)라 아무 일도 없다 - 감사 로그가 중복되지 않는다.
         $this->service->markUsed($owner, $proposal->id, AiChatProposal::KIND_POPUP, $popup);
-        $this->assertSame(1, \App\Models\AdminAuditLog::where('action', 'ai_chat')->where('auditable_type', Popup::class)->count());
+        $this->assertSame(1, AdminAuditLog::where('action', 'ai_chat')->where('auditable_type', Popup::class)->count());
     }
 
     // ───────────── 미리 채우기 값 ─────────────

@@ -323,14 +323,17 @@ class AiProposalService
         $today = now()->startOfDay();
         $offset = AiText::intInRange($args['start_offset_days'] ?? null, 0, 365);
         $duration = AiText::intInRange($args['duration_days'] ?? null, 1, 365);
-        $start = null;
-        $end = null;
 
-        if ($offset !== null || $duration !== null) {
-            $start = $today->copy()->addDays($offset ?? 0);
-            $end = $duration !== null ? $start->copy()->addDays($duration - 1)->endOfDay() : null;
+        // 시작·종료를 각각 정한다: 시작은 상대 오프셋이 명시 start_date 보다 우선, 종료는 기간(duration_days)이 명시 end_date 보다 우선.
+        // 예전에는 오프셋/기간 중 하나라도 있으면 명시 날짜를 통째로 무시해서 "다음 주 월요일부터 12월 31일까지"처럼
+        // start_offset_days 와 end_date 를 함께 주면 end_date 가 조용히 사라졌다(리뷰 L6).
+        $start = $offset !== null ? $today->copy()->addDays($offset) : AiText::strictDate($args['start_date'] ?? null);
+
+        if ($duration !== null) {
+            // 기간만 있고 시작이 없으면 오늘부터.
+            $start ??= $today->copy();
+            $end = $start->copy()->addDays($duration - 1)->endOfDay();
         } else {
-            $start = AiText::strictDate($args['start_date'] ?? null);
             $end = AiText::strictDate($args['end_date'] ?? null)?->endOfDay();
         }
 
@@ -422,6 +425,7 @@ class AiProposalService
             || $proposal->kind !== $kind
             || $proposal->ownerId() !== (int) $admin->id
             || ! $proposal->isOpenable()
+            || ! $this->mayActOn($admin, $proposal)
         ) {
             return null;
         }
@@ -429,24 +433,50 @@ class AiProposalService
         return $proposal;
     }
 
-    // 카드 버튼(이미지 생성 등)용: 종류 무관, 소유자·만료·상태만 확인.
+    // 카드 버튼(이미지 생성 등)용: 종류 무관, 소유자·만료·상태에 더해 지금도 이 종류를 만들 권한이 있는지 확인한다
+    // (AI 권한이나 해당 화면의 작성 권한을 박탈당한 관리자가 기존 카드로 이미지 한도를 쓰지 못하게 - 리뷰 L2).
     public function resolveOwned(User $admin, int $id): ?AiChatProposal
     {
         $proposal = AiChatProposal::query()->with('message.conversation')->find($id);
 
-        if ($proposal === null || $proposal->ownerId() !== (int) $admin->id || ! $proposal->isOpenable()) {
+        if ($proposal === null
+            || $proposal->ownerId() !== (int) $admin->id
+            || ! $proposal->isOpenable()
+            || ! $this->mayActOn($admin, $proposal)
+        ) {
             return null;
         }
 
         return $proposal;
     }
 
+    // 지금도 AI 비서를 쓸 수 있고(ai_assistant 권한), 이 제안 종류의 작성 화면을 열 권한(canAccess/canCreate)이 있는가.
+    // 화면 열기(open_page) 카드는 이동 권한을 Filament 가 목적지에서 다시 확인하므로 AI 권한만 본다.
+    private function mayActOn(User $admin, AiChatProposal $proposal): bool
+    {
+        if (! $admin->isAdmin() || ! $admin->hasAdminPermission('ai_assistant')) {
+            return false;
+        }
+
+        $screen = self::KIND_SCREENS[$proposal->kind] ?? null;
+
+        return $screen === null || AdminScreenMap::canCreate($admin, $screen);
+    }
+
     // 작성 화면에서 실제로 저장된 직후 호출 - 원자적으로 used 로 바꾸고 감사 로그에 제안 id 를 남긴다.
+    //
+    // 만료(expires_at)는 "열기" 제한이지 "저장" 제한이 아니다. 카드를 10:00 에 열어 폼을 채워 둔 채 11:30 에 저장해도 사용 처리가 돼야 한다 -
+    // 예전에는 여기서 만료를 다시 검사해 조기 반환했고, 그러면 제안이 used 가 되지 못해 보관 정리가 그 이미지를 고아 파일로 보고 지워
+    // 실제 팝업·배너·페이지의 이미지가 404 가 됐다(리뷰 M1). 그래서 소유자·종류·미사용 상태만 본다(권한은 저장 화면 자체가 이미 확인했다).
     public function markUsed(User $admin, int $id, string $kind, Model $record): void
     {
-        $proposal = $this->resolveForPrefill($admin, $id, $kind);
+        $proposal = AiChatProposal::query()->with('message.conversation')->find($id);
 
-        if ($proposal === null) {
+        if ($proposal === null
+            || $proposal->kind !== $kind
+            || $proposal->ownerId() !== (int) $admin->id
+            || ! in_array($proposal->status, [AiChatProposal::STATUS_PROPOSED, AiChatProposal::STATUS_IMAGE_READY], true)
+        ) {
             return;
         }
 

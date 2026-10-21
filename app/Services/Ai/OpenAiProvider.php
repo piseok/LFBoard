@@ -3,8 +3,8 @@
 namespace App\Services\Ai;
 
 use App\Services\SiteSettingService;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
-use RuntimeException;
 
 class OpenAiProvider implements AiProviderContract
 {
@@ -17,6 +17,12 @@ class OpenAiProvider implements AiProviderContract
     private const IMAGE_MODEL = 'gpt-image-1';
 
     public function __construct(private readonly SiteSettingService $siteSettings) {}
+
+    // HTTP 오류 응답 → 상태 코드와 제공자의 error.code(예: model_not_found·invalid_api_key)만 담은 예외. 원문 응답은 담지 않는다.
+    private function httpFailure(string $message, Response $response): AiProviderException
+    {
+        return new AiProviderException($message, $response->status(), AiProviderException::cleanReason($response->json('error.code')));
+    }
 
     public function key(): string
     {
@@ -79,7 +85,7 @@ class OpenAiProvider implements AiProviderContract
             ->post('https://api.openai.com/v1/chat/completions', $body);
 
         if (! $response->successful()) {
-            throw new RuntimeException('OpenAI 채팅 요청이 실패했습니다.');
+            throw $this->httpFailure('OpenAI 채팅 요청이 실패했습니다.', $response);
         }
 
         $finishReason = (string) $response->json('choices.0.finish_reason', '');
@@ -99,7 +105,7 @@ class OpenAiProvider implements AiProviderContract
             $args = is_string($arguments) ? json_decode($arguments === '' ? '{}' : $arguments, true) : null;
 
             if ($finishReason === 'length' || ! is_array($args)) {
-                throw new RuntimeException('OpenAI 도구 호출 인자를 해석할 수 없습니다.');
+                throw new AiProviderException('OpenAI 도구 호출 인자를 해석할 수 없습니다.', $response->status(), AiProviderException::cleanReason($finishReason));
             }
 
             $calls[] = new AiToolCall($name, $args);
@@ -113,7 +119,7 @@ class OpenAiProvider implements AiProviderContract
                 throw AiBlockedException::forChat('CONTENT_FILTER');
             }
 
-            throw new RuntimeException('OpenAI 응답을 해석할 수 없습니다.');
+            throw new AiProviderException('OpenAI 응답을 해석할 수 없습니다.', $response->status(), AiProviderException::cleanReason($finishReason));
         }
 
         return new AiChatResult($text, $calls);
@@ -138,13 +144,13 @@ class OpenAiProvider implements AiProviderContract
                 throw AiBlockedException::forImage($errorCode);
             }
 
-            throw new RuntimeException('OpenAI 이미지 생성 요청이 실패했습니다.');
+            throw $this->httpFailure('OpenAI 이미지 생성 요청이 실패했습니다.', $response);
         }
 
         $base64 = $response->json('data.0.b64_json');
 
         if (! is_string($base64) || $base64 === '') {
-            throw new RuntimeException('OpenAI 이미지 응답을 해석할 수 없습니다.');
+            throw new AiProviderException('OpenAI 이미지 응답을 해석할 수 없습니다.', $response->status());
         }
 
         $path = tempnam(sys_get_temp_dir(), 'ai_img_').'.png';
