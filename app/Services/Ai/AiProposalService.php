@@ -8,6 +8,7 @@ use App\Models\Board;
 use App\Models\User;
 use App\Services\AdminAuditLogService;
 use App\Support\AiText;
+use App\Support\SafeMarkdown;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -15,7 +16,8 @@ use Illuminate\Database\Eloquent\Model;
 //  1. 모델은 제안만 한다 - 여기에는 실행(저장)이 없다. 카드의 버튼은 해당 Filament 작성 화면으로 가는 GET 링크일 뿐이고,
 //     그 화면이 폼에 값만 채운다(저장은 사람이 누른다). 쓰기 전용 AI 엔드포인트가 없으므로 Filament 의 권한 확인
 //     (canAccess/canCreate)을 우회할 길이 없다.
-//  2. 모델 인자는 신뢰하지 않는다 - 제목은 한 줄로·길이 제한, 본문은 평문만 받아 서버가 이스케이프해 <p> 로 감싸고,
+//  2. 모델 인자는 신뢰하지 않는다 - 제목은 한 줄로·길이 제한, 본문은 "평문(가벼운 마크다운)"으로만 받아 서버가 안전하게
+//     HTML 로 만들고(원문 HTML 은 전부 이스케이프, 링크·이미지는 글자만 남김 - SafeMarkdown::editorHtml),
 //     날짜는 서버가 계산·검증하며(상대 오프셋 우선), 링크는 http/https 만, 게시판은 서버가 존재·쓰기 가능 여부를 확인한다.
 //  3. 현재 관리자가 쓸 수 없는 것은 도구 선언에도 카드에도 나오지 않는다.
 class AiProposalService
@@ -479,7 +481,7 @@ class AiProposalService
                 'title' => $p['title'] ?? null,
                 'content_type' => ($p['content_type'] ?? 'html') === 'image' ? 'image' : 'html',
                 'image_path' => $image ? [$image] : null,
-                'html_content' => ($p['content_type'] ?? 'html') === 'html' ? AiText::toParagraphHtml((string) ($p['body'] ?? '')) : null,
+                'html_content' => ($p['content_type'] ?? 'html') === 'html' ? SafeMarkdown::editorHtml((string) ($p['body'] ?? '')) : null,
                 'started_at' => $p['started_at'] ?? null,
                 'ended_at' => $p['ended_at'] ?? null,
             ], fn ($value) => $value !== null && $value !== '') + ['is_active' => false],
@@ -490,7 +492,7 @@ class AiProposalService
                 'title' => $p['title'] ?? null,
                 'slug' => $p['slug'] ?? null,
                 'content_type' => 'editor',
-                'content' => AiText::toParagraphHtml((string) ($p['body'] ?? '')),
+                'content' => SafeMarkdown::editorHtml((string) ($p['body'] ?? '')),
                 'meta_title' => $p['meta_title'] ?? null,
                 'meta_description' => $p['meta_description'] ?? null,
                 'meta_keywords' => $p['meta_keywords'] ?? null,
@@ -529,11 +531,11 @@ class AiProposalService
         $useEditor = $p['use_editor'] ?? null;
 
         if ($useEditor !== false) {
-            $data['content'] = AiText::toParagraphHtml($body);
+            $data['content'] = SafeMarkdown::editorHtml($body);
         }
 
         if ($useEditor !== true) {
-            $data['content_text'] = $body;
+            $data['content_text'] = SafeMarkdown::plainText($body);
         }
 
         return $data;

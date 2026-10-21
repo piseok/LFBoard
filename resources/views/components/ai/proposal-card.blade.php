@@ -26,7 +26,7 @@
 
         return ($from || $to) ? (($from ?? '미정').' ~ '.($to ?? '미정')) : null;
     };
-    $bodyPreview = \Illuminate\Support\Str::limit(\App\Support\AiText::singleLine($p['body'] ?? '', 200), 120);
+    $bodyPreview = \Illuminate\Support\Str::limit(\App\Support\AiText::singleLine(\App\Support\SafeMarkdown::plainText($p['body'] ?? ''), 300), 120);
 @endphp
 
 <section class="aic-card" aria-label="{{ $kindLabel }} 카드">

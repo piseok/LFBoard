@@ -123,6 +123,16 @@ class AiFormFillSchemaTest extends TestCase
         $this->assertNull(AiFormFillSchema::formatValue('nope', 'title', 'x'));
     }
 
+    public function test_one_line_fields_take_only_the_first_line_of_a_multi_paragraph_answer(): void
+    {
+        $answer = "**2026 신제품 출시 안내**\n\n안녕하세요. 본문이 이어집니다.\n\n- 하나\n- 둘";
+
+        $this->assertSame('2026 신제품 출시 안내', AiFormFillSchema::formatValue('posts', 'title', $answer));
+        // 목록 기호는 걷지만 제목 안의 숫자는 지우지 않는다.
+        $this->assertSame('하나', AiFormFillSchema::formatValue('pages', 'meta_keywords', "- 하나\n- 둘"));
+        $this->assertSame('', AiFormFillSchema::formatValue('posts', 'title', "  \n\n "));
+    }
+
     // ───────────── 마크다운 렌더 안전 ─────────────
 
     public function test_chat_markdown_escapes_html_drops_images_and_only_keeps_http_links(): void

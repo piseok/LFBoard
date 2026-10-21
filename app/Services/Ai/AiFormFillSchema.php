@@ -144,8 +144,23 @@ final class AiFormFillSchema
             'rich' => SafeMarkdown::editorHtml($text),
             'text' => AiText::multiLine(SafeMarkdown::plainText($text), $definition['max'] ?? 5000),
             default => $field === 'link_url'
-                ? (AiText::httpUrl(SafeMarkdown::plainText($text), $definition['max'] ?? 255) ?? '')
-                : AiText::singleLine(SafeMarkdown::plainText($text), $definition['max'] ?? 255),
+                ? (AiText::httpUrl(self::firstLine($text), $definition['max'] ?? 255) ?? '')
+                : AiText::singleLine(self::firstLine($text), $definition['max'] ?? 255),
         };
+    }
+
+    // 한 줄 칸(제목·ALT·메타 등)에는 답변 전체가 아니라 첫 줄만 넣는다 - 여러 문단 답변이 제목 칸에 통째로 들어가지 않게.
+    // 목록 기호("- ")는 걷어 낸다.
+    private static function firstLine(string $text): string
+    {
+        foreach (preg_split("/\n+/", SafeMarkdown::plainText($text)) ?: [] as $line) {
+            $line = trim(preg_replace('/^(?:[-*]|\d+[.)])\s+/u', '', trim($line)) ?? '');
+
+            if ($line !== '') {
+                return $line;
+            }
+        }
+
+        return '';
     }
 }

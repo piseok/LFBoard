@@ -88,7 +88,7 @@ class AiChatLogResource extends Resource
                 ViewAction::make()
                     ->modalHeading(fn (AiChatConversation $record) => $record->title ?: '(제목 없음)')
                     ->modalContent(fn (AiChatConversation $record) => view('filament.resources.ai-chat-logs.messages', [
-                        'messages' => $record->messages()->orderBy('id')->get(),
+                        'messages' => $record->messages()->with('proposals')->orderBy('id')->get(),
                     ]))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('닫기'),

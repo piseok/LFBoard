@@ -34,6 +34,7 @@
     --aic-warn-bg: #fef3c7;
     --aic-warn-fg: #78350f;
     --aic-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    --aic-head-hover: rgba(0, 0, 0, 0.12);
     color-scheme: light;
 }
 
@@ -62,6 +63,7 @@
     --aic-warn-bg: #451a03;
     --aic-warn-fg: #fde68a;
     --aic-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    --aic-head-hover: rgba(0, 0, 0, 0.12);
     color-scheme: dark;
 }
 
@@ -154,7 +156,7 @@
     font-size: 13px;
     cursor: pointer;
 }
-.aic-headbtn:hover { background: rgba(0, 0, 0, 0.12); }
+.aic-headbtn:hover { background: var(--aic-head-hover); }
 .aic-head :focus-visible { outline-color: var(--aic-accent-fg); }
 
 /* ───── 대화 목록(접힘) ───── */
@@ -396,11 +398,28 @@
 
 /* 채운 칸 표시(public/js/ai-chat.js 가 작성 화면의 칸에 붙인다) */
 [data-ai-filled] {
-    outline: 2px solid #b45309;
+    outline: 2px solid var(--aic-accent);
     outline-offset: 2px;
     border-radius: 8px;
 }
-.dark [data-ai-filled] { outline-color: #fbbf24; }
+
+/* ───── 오늘 사용량 요약(사이트 설정 AI 탭·AI 비서 사용 내역) - 위젯 밖이라 토큰을 직접 쓴다 ───── */
+.aic-usage-summary { color: var(--aic-fg); font-size: 14px; }
+.aic-usage-summary__lead { margin: 0 0 8px; }
+.aic-usage-summary__empty { margin: 0; color: var(--aic-muted); }
+.aic-usage-table { width: 100%; max-width: 520px; border-collapse: collapse; background: var(--aic-bg); color: var(--aic-fg); }
+.aic-usage-table th,
+.aic-usage-table td { padding: 6px 10px; border: 1px solid var(--aic-border); text-align: left; }
+.aic-usage-table thead th { background: var(--aic-surface); color: var(--aic-surface-fg); }
+.aic-usage-table td { text-align: right; font-variant-numeric: tabular-nums; }
+.aic-usage-table tbody th { font-weight: 600; }
+
+/* 낮은 화면(노트북 분할 화면·가로 모드): 입력 영역이 대화 로그를 다 먹지 않게 - 패널 자체를 스크롤하고 로그 최소 높이를 보장한다. */
+@media (max-height: 560px) {
+    .aic-panel { overflow-y: auto; }
+    .aic-log { flex: 1 0 140px; }
+    .aic-usage-sub { display: none; }
+}
 
 @media (max-width: 480px) {
     .aic-root { right: 12px; bottom: 12px; }

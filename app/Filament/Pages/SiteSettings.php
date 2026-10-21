@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Filament\Concerns\RequiresSuperAdmin;
 use App\Models\EmailTemplate;
 use App\Models\Language;
+use App\Services\AiUsageService;
 use App\Services\EmailService;
 use App\Services\SiteSettingService;
 use App\Services\UploadService;
@@ -90,6 +91,15 @@ class SiteSettings extends Page
         // 한 번도 저장된 적 없으면(설치 직후 등) site_settings 테이블에 값 자체가 없어 Select의
         // ->default('auto')가 적용되지 않고 빈 값으로 채워진다 — 여기서 명시적으로 기본값을 보정한다.
         $settings['session_secure_cookie_mode'] = ($settings['session_secure_cookie_mode'] ?? '') ?: 'auto';
+
+        // AI 비서 일일 한도·도구 호출 사용 - 저장된 값이 없으면 실제로 적용 중인 기본값(AiUsageService)을 보여 준다.
+        $usage = app(AiUsageService::class);
+        foreach (AiUsageService::SETTING_KEYS as $kind => $scopes) {
+            foreach ($scopes as $scope => $settingKey) {
+                $settings[$settingKey] = (string) $usage->limit($kind, $scope);
+            }
+        }
+        $settings['ai_tools_enabled'] = ($settings['ai_tools_enabled'] ?? '1') === '0' ? '0' : '1';
 
         $this->form->fill($settings);
     }
@@ -537,10 +547,33 @@ class SiteSettings extends Page
             ->schema([
                 Text::make('API 키를 입력한 제공자만 관리자 화면의 AI 비서 퀵메뉴에 나타납니다. 하나도 입력하지 않으면 AI 비서 기능 자체가 표시되지 않습니다(선택 기능). 사용 권한은 회원관리 > 관리자 권한에서 개별 부여합니다.')
                     ->color('gray'),
+                Text::make('개인정보 안내: AI 비서와 나눈 대화 내용과 행동 카드(제안)에 담긴 문구는 외부 AI 제공자(Google·OpenAI)의 서버로 전송됩니다. 관리자에게 비밀번호·주민등록번호·카드번호 같은 개인정보를 입력하지 않도록 안내해 주세요. 보내는 시스템 지시문에는 관리자 화면 이름·오늘 날짜·게시판 이름만 들어가며, 관리자 주소(URL)·계정 이름·이메일은 포함되지 않습니다.')
+                    ->color('gray')
+                    ->columnSpanFull(),
                 TextInput::make('ai_openai_api_key')->label('OpenAI API 키')->password()->revealable(),
                 TextInput::make('ai_gemini_api_key')->label('Google Gemini API 키')->password()->revealable(),
                 TextInput::make('ai_chat_retention_days')->label('대화 기록 자동 삭제 기간(일)')->numeric()->default(90)
                     ->helperText('이 기간이 지난 대화(및 생성된 이미지)는 완전히 삭제됩니다. 0 이하로 두면 영구 보관됩니다.'),
+                $this->boolToggle('ai_tools_enabled', '도구 호출(행동 카드) 사용')
+                    ->helperText('켜면 AI 가 "팝업 만들어줘" 같은 요청에 작성 화면으로 가는 카드를 제안합니다(저장은 항상 사람이). 모델이 도구 호출을 지원하지 않거나 오작동하면 끄세요 - 일반 대화로만 동작합니다.'),
+                Text::make('일일 사용 한도(우리 사이트 기준) - 아래 숫자는 AI 제공자를 한 번 부른 횟수입니다. 제공자 쪽 크레딧 잔액은 조회 수단이 없어 보여 주지 않으며, 이 한도가 비용 상한 역할을 합니다. 관리자 1명 한도와 사이트 전체 한도 중 하나라도 넘으면 막히고, 매일 0시(서버 시간)에 초기화됩니다. 0 으로 두면 그 종류는 사용할 수 없습니다(무제한은 없습니다).')
+                    ->color('gray')
+                    ->columnSpanFull(),
+                TextInput::make('ai_chat_daily_limit_per_admin')->label('관리자 1명당 하루 질문 한도(회)')
+                    ->numeric()->integer()->minValue(0)->maxValue(100000)->required(),
+                TextInput::make('ai_chat_daily_limit')->label('사이트 전체 하루 질문 한도(회)')
+                    ->numeric()->integer()->minValue(0)->maxValue(100000)->required(),
+                TextInput::make('ai_image_daily_limit_per_admin')->label('관리자 1명당 하루 이미지 한도(장)')
+                    ->numeric()->integer()->minValue(0)->maxValue(100000)->required()
+                    ->helperText('이미지 생성은 질문보다 비용이 큽니다.'),
+                TextInput::make('ai_image_daily_limit')->label('사이트 전체 하루 이미지 한도(장)')
+                    ->numeric()->integer()->minValue(0)->maxValue(100000)->required(),
+                Placeholder::make('ai_usage_today')->label('오늘 사용량')
+                    ->content(fn () => new HtmlString(view('filament.partials.ai-usage-summary', [
+                        'summary' => app(AiUsageService::class)->todaySummary(),
+                        'usage' => app(AiUsageService::class),
+                    ])->render()))
+                    ->columnSpanFull(),
             ])
             ->columns(2);
     }
@@ -836,6 +869,8 @@ class SiteSettings extends Page
             'identity_verification_merchant_id' => 'integration', 'identity_verification_api_key' => 'integration',
             'inquiry_retention_months' => 'general',
             'ai_openai_api_key' => 'ai', 'ai_gemini_api_key' => 'ai', 'ai_chat_retention_days' => 'ai',
+            'ai_tools_enabled' => 'ai', 'ai_chat_daily_limit' => 'ai', 'ai_chat_daily_limit_per_admin' => 'ai',
+            'ai_image_daily_limit' => 'ai', 'ai_image_daily_limit_per_admin' => 'ai',
             'dormant_processing_enabled' => 'dormant', 'dormant_conversion_months' => 'dormant',
             'forced_withdrawal_months' => 'dormant', 'dormant_notice_days' => 'dormant',
             'withdrawal_notice_days' => 'dormant', 'email_dormant_notice_enabled' => 'dormant',

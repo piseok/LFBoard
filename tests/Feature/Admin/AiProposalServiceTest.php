@@ -125,12 +125,12 @@ class AiProposalServiceTest extends TestCase
         $this->assertNull($textOnly[0]['payload']['image_prompt']);
     }
 
-    public function test_body_is_kept_as_plain_text_and_rendered_escaped_into_paragraphs(): void
+    public function test_body_is_rendered_into_safe_html_with_raw_html_escaped_and_links_images_reduced_to_text(): void
     {
         $admin = $this->super();
         $cards = $this->normalizeOne($admin, 'propose_popup', [
             'title' => '공지',
-            'body' => "첫 문단 <script>alert(1)</script>\n\n<img src=https://evil.test/t.png onerror=alert(1)>\n[링크](https://evil.test)",
+            'body' => "첫 문단 <script>alert(1)</script>\n\n<img src=https://evil.test/t.png onerror=alert(1)>\n\n[링크](https://evil.test) ![추적](https://evil.test/p.png?q=1)",
         ]);
         $proposal = $this->persistOne($admin, $cards[0]);
 
@@ -139,8 +139,21 @@ class AiProposalServiceTest extends TestCase
         $this->assertStringNotContainsString('<script', $html);
         $this->assertStringNotContainsString('<img', $html);
         $this->assertStringNotContainsString('<a ', $html);
+        $this->assertStringNotContainsString('href=', $html);
+        $this->assertStringNotContainsString('evil.test/p.png', $html, '이미지 주소는 어디에도 남지 않는다');
         $this->assertStringContainsString('&lt;script&gt;', $html);
-        $this->assertSame(2, substr_count($html, '<p>')); // 빈 줄로 문단이 나뉜다
+        $this->assertStringContainsString('링크', $html); // 링크는 글자만 남는다
+        $this->assertGreaterThanOrEqual(2, substr_count($html, '<p>'));
+    }
+
+    public function test_light_markdown_in_the_body_becomes_real_formatting_and_single_newlines_become_line_breaks(): void
+    {
+        $admin = $this->super();
+        $cards = $this->normalizeOne($admin, 'propose_page', ['title' => '소개', 'body' => "**굵게**\n둘째 줄\n\n- 하나\n- 둘"]);
+        $html = $this->service->prefillData($this->persistOne($admin, $cards[0]))['content'];
+
+        $this->assertStringContainsString('<strong>굵게</strong><br />', $html);
+        $this->assertStringContainsString('<li>하나</li>', $html);
     }
 
     public function test_unknown_tool_names_are_ignored_and_duplicates_collapse_and_cards_are_capped_at_three(): void

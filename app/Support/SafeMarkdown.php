@@ -45,7 +45,8 @@ final class SafeMarkdown
     {
         $html = self::editorHtml($markdown);
         $html = preg_replace('#<li[^>]*>#i', "\n- ", $html) ?? '';
-        $html = preg_replace('#</(p|li|ul|ol|blockquote|pre|h[1-6])>|<br\s*/?>|<hr\s*/?>#i', "\n", $html) ?? '';
+        $html = preg_replace('#<br\s*/?>\n?#i', "\n", $html) ?? ''; // 줄바꿈 뒤의 개행(soft_break 가 붙임)까지 한 번으로
+        $html = preg_replace('#</(p|li|ul|ol|blockquote|pre|h[1-6])>|<hr\s*/?>#i', "\n", $html) ?? '';
         $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $text = preg_replace("/\n{3,}/", "\n\n", str_replace("\r", '', $text)) ?? '';
 
@@ -72,6 +73,8 @@ final class SafeMarkdown
                 'html_input' => 'escape',
                 'allow_unsafe_links' => false,
                 'max_nesting_level' => 20,
+                // 모델 답은 문단 안의 줄바꿈을 한 번의 개행으로만 주는 일이 많다 - 그대로 줄바꿈으로 보이게 한다.
+                'renderer' => ['soft_break' => "<br />\n"],
             ]);
             $environment->addExtension(new CommonMarkCoreExtension);
             $environment->addRenderer(Image::class, self::imageRenderer(), 100);

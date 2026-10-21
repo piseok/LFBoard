@@ -40,6 +40,34 @@ class AiFormFillSafetyTest extends TestCase
         $this->assertDatabaseCount('posts', 0);
     }
 
+    // 사용자 테스트 결함 2 ①: 위젯의 "채우기" 이벤트(fill-form-field)가 리치 에디터 칸까지 실제로 반영되고, 사람이 저장하면
+    // 그 내용이 저장되는지 - 이벤트 → 폼 상태 → 사람이 저장 버튼(create) 의 전체 흐름.
+    public function test_widget_event_fills_the_rich_editor_and_the_human_save_persists_it(): void
+    {
+        $this->seed(\Database\Seeders\LanguageSeeder::class);
+        $board = Board::create(['name' => 'B', 'slug' => 'b', 'locale' => 'ko', 'skin' => 'default', 'is_active' => true, 'use_editor' => true]);
+        $this->actingAs($this->admin());
+
+        $page = Livewire::test(CreatePost::class)
+            ->dispatch('fill-form-field', field: 'title', value: 'AI 제목')
+            ->assertSet('data.title', 'AI 제목')
+            ->assertNotified('제목 칸에 AI 내용을 채웠습니다')
+            ->assertDispatched('ai-field-filled')
+            ->dispatch('fill-form-field', field: 'content', value: '<p>첫 문단</p><ul><li>하나</li></ul><p><strong>굵게</strong></p>')
+            ->assertNotified('본문(에디터형 게시판) 칸에 AI 내용을 채웠습니다');
+
+        // 이벤트만으로는 저장되지 않는다.
+        $this->assertDatabaseCount('posts', 0);
+
+        // 사람이 게시판을 고르고 저장 버튼을 눌러야만 저장된다.
+        $page->fillForm(['board_id' => $board->id])->call('create')->assertHasNoFormErrors();
+
+        $post = \App\Models\Post::firstOrFail();
+        $this->assertSame('AI 제목', $post->title);
+        $this->assertStringContainsString('<strong>굵게</strong>', $post->content);
+        $this->assertStringContainsString('<li>하나</li>', $post->content);
+    }
+
     public function test_filling_a_popup_image_field_does_not_create_a_popup(): void
     {
         $this->actingAs($this->admin());

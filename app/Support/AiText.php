@@ -6,7 +6,8 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
 // AI 가 만든 문자열을 서버가 받아들이는 방법을 한 곳에 모은다. 모델 출력은 프롬프트 인젝션으로 얼마든지
-// 오염될 수 있으므로 "서식 없는 평문"으로만 받고, HTML 은 서버가 직접 만든다(이스케이프 + 문단 <p>).
+// 오염될 수 있으므로 한 줄 칸은 제어문자를 걷어 낸 평문으로, 본문은 "평문(가벼운 마크다운)"으로만 받고 HTML 은
+// 서버가 직접 만든다(SafeMarkdown::editorHtml - 원문 HTML 이스케이프, 링크·이미지는 글자만).
 // 이렇게 하면 정제기(HtmlSanitizerService)가 외부 <img>/<a> 를 허용하더라도 모델이 추적 이미지나 피싱 링크를
 // 공개 화면에 심을 수 없다.
 final class AiText
@@ -31,23 +32,6 @@ final class AiText
         $text = trim(preg_replace("/\n{3,}/", "\n\n", $text) ?? '');
 
         return mb_substr($text, 0, $max);
-    }
-
-    // 평문 → 에디터용 HTML: 빈 줄로 문단을 나누고(<p>), 문단 안의 줄바꿈은 <br> 로 둔다. 모든 글자는 이스케이프된다.
-    public static function toParagraphHtml(string $plain): string
-    {
-        $plain = trim(str_replace(["\r\n", "\r"], "\n", $plain));
-
-        if ($plain === '') {
-            return '';
-        }
-
-        $paragraphs = preg_split("/\n{2,}/", $plain) ?: [];
-
-        return implode('', array_map(
-            fn (string $paragraph) => '<p>'.nl2br(e(trim($paragraph)), false).'</p>',
-            array_filter($paragraphs, fn (string $paragraph) => trim($paragraph) !== '')
-        ));
     }
 
     // http/https 이고 호스트가 있는 URL 만 통과(javascript:, data:, 상대경로 등은 버린다).

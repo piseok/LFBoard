@@ -112,6 +112,16 @@ class SiteSettingSeeder extends Seeder
                 'identity_verification_provider' => '',
                 'identity_verification_api_key' => '',
             ],
+
+            // AI 비서 일일 한도·도구 호출(2026-10-21, AI 비서 2.0) - AiUsageService::DEFAULT_LIMITS 와 같은 보수적인 기본값.
+            // API 키(ai_openai_api_key/ai_gemini_api_key)는 일부러 시딩하지 않는다(재시딩이 키를 지우면 안 된다).
+            'ai' => [
+                'ai_tools_enabled' => '1',
+                'ai_chat_daily_limit_per_admin' => '30',
+                'ai_chat_daily_limit' => '150',
+                'ai_image_daily_limit_per_admin' => '5',
+                'ai_image_daily_limit' => '20',
+            ],
         ];
 
         foreach ($settings as $group => $keys) {
