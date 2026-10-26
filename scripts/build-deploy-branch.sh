@@ -42,6 +42,13 @@ fi
 echo "== 1/6: main으로 전환하고 dev의 새 커밋을 cherry-pick합니다 =="
 git checkout main
 
+# 2026-10-26: dev 의 vendor/(dev 에서는 .gitignore 대상)가 디스크에 남은 채로 main 으로 오면, main 이 추적하지 않는 파일은 '미추적'으로 남는다
+# (예: Filament 업그레이드로 dev vendor 에만 생긴 새 파일). 이어지는 cherry-pick 이 그 경로를 추가하려 하면 git 이
+# "untracked working tree files would be overwritten" 로 cherry-pick 을 시작도 못 하고 실패하고, 아래 `--skip` 이
+# "no cherry-pick in progress" 로 죽는다(Filament 4.15.3 모의 실행 2회차에서 재현). vendor 는 4단계에서 어차피 통째로 다시 만들고
+# 6단계에서 dev 용으로 복원하므로, 여기서 미추적 vendor 파일만 먼저 치운다(main 이 추적하는 파일은 건드리지 않음).
+git clean -fdq -- vendor
+
 # 2026-09-02 — main과 dev는 git 상 완전히 무관한 히스토리다(git merge-base main dev가 아무것도
 # 반환하지 않음 — 과거 어느 시점에 LFBoard 저장소가 dev와 진짜 조상 관계 없이 별도로 구성된
 # 것으로 추정). 그래서 예전의 `git merge dev`는 이제 항상 "refusing to merge unrelated
@@ -268,10 +275,13 @@ docker exec "$CONTAINER" sh -c "cd $BUILD_DIR && composer install --no-dev --opt
 # 평탄화된 루트 에셋이 옛 버전으로 남은 사고가 있었다(위 '생성 에셋 제거' 주석). 항상 지우고 재생성하므로 멱등이고, 이전 버전의
 # 해시 이름 폰트 같은 잔재도 남지 않는다. .env 는 지워서 개발자 환경(DB·캐시 설정)과 무관하게 같은 결과가 나오게 한다.
 # BUILD_DIR 에는 storage/framework/{cache,sessions,views}·storage/logs 가 없어(2단계 tar 에서 제외) 뷰 컴파일러가 부팅 중 죽으므로 만들어 준다.
+# bootstrap/cache 의 packages.php·services.php 는 dev(개발 의존성 포함) 기준으로 만들어진 복사본이라, --no-dev vendor 에 없는 Pail/Sail/Collision
+# 프로바이더를 가리켜 부팅이 죽을 수 있으므로 지운다(없으면 Laravel 이 새 vendor 기준으로 다시 만든다 — BUILD_DIR 안에서만).
 echo "== 3b/6: Filament 에셋(js/css/fonts)을 새 vendor 기준으로 재생성합니다 (filament:assets) =="
 docker exec "$CONTAINER" sh -c "
   cd $BUILD_DIR &&
   rm -f .env &&
+  find bootstrap/cache -type f ! -name '.gitignore' -delete &&
   rm -rf js/filament css/filament fonts/filament &&
   mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views &&
   php artisan filament:assets --no-interaction >/tmp/filament_assets_\$\$.log 2>&1 || { cat /tmp/filament_assets_\$\$.log; exit 1; }
@@ -337,6 +347,19 @@ elif [ -n "$stale_assets" ]; then
 else
   echo "  OK: Filament 에셋 ${asset_count}개 모두 vendor dist 와 일치"
 fi
+# (1b) 내용이 dist 와 같아도 '파일이 빠지는' 경우(filament:assets 는 복사 실패를 무시하고 성공을 반환한다, 신규 컴포넌트 누락 등)는
+#      위 점검이 못 잡는다. dev 가 추적하는 public/{css,js,fonts}/filament 의 파일 경로 목록과 main 루트의 목록이 같아야 한다.
+dev_asset_paths="$(mktemp)"; main_asset_paths="$(mktemp)"
+git ls-tree -r --name-only dev -- public/css/filament public/js/filament public/fonts/filament | sed 's#^public/##' | sort > "$dev_asset_paths"
+git ls-tree -r --name-only HEAD -- css/filament js/filament fonts/filament | sort > "$main_asset_paths"
+if ! cmp -s "$dev_asset_paths" "$main_asset_paths"; then
+  echo "점검 실패: dev 의 public/…/filament 와 main 루트 …/filament 의 파일 목록이 다릅니다('<' dev에만, '>' main에만, 상위 10개):" >&2
+  diff "$dev_asset_paths" "$main_asset_paths" | grep '^[<>]' | head -10 >&2 || true
+  verify_failed=1
+else
+  echo "  OK: dev 와 main 의 Filament 에셋 파일 목록 일치($(wc -l < "$dev_asset_paths")개)"
+fi
+rm -f "$dev_asset_paths" "$main_asset_paths"
 # (2) main 에 있으면 안 되는 dev 전용 경로(앞에서 지우거나 평탄화한 것들)가 추적되고 있지 않은지.
 leaked_paths="$(git ls-files -- .claude .github CLAUDE.md PROJECT.md claude_code_prompts.md public | head -5 || true)"
 if [ -n "$leaked_paths" ]; then
