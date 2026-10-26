@@ -361,7 +361,7 @@ else
 fi
 rm -f "$dev_asset_paths" "$main_asset_paths"
 # (2) main 에 있으면 안 되는 dev 전용 경로(앞에서 지우거나 평탄화한 것들)가 추적되고 있지 않은지.
-leaked_paths="$(git ls-files -- .claude .github CLAUDE.md PROJECT.md claude_code_prompts.md public | head -5 || true)"
+leaked_paths="$(git ls-tree -r --name-only HEAD -- .claude .github CLAUDE.md PROJECT.md claude_code_prompts.md public | head -5 || true)"
 if [ -n "$leaked_paths" ]; then
   echo "점검 실패: main 에 있으면 안 되는 경로가 추적되고 있습니다(상위 5개):" >&2
   echo "$leaked_paths" >&2
