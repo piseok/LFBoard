@@ -186,6 +186,22 @@ else
   git commit -m "Remove CI workflow and use minimal .gitignore on main"
 fi
 
+# 2026-10-26: dev 의 public/{css,js,fonts}/filament 는 `php artisan filament:assets` 가 vendor/filament/*/dist 에서
+# 복사해 낸 '생성물'이다. main 은 public/ 을 평탄화하므로 같은 생성물이 루트의 {css,js,fonts}/filament 에 있고,
+# 아래 3b 단계가 새 vendor 로부터 그 루트 쪽을 통째로 다시 만든다. 문제는 cherry-pick 이다: dev 의 이 경로 변경을 옮길 때
+# git 의 rename 탐지가 '내용이 같은' vendor/filament/*/dist 로 잘못 짝지어(Filament 4.11.7→4.15.3 때 실제로 발생)
+# 변경이 vendor 쪽에만 반영되고 평탄화된 루트 에셋은 옛 버전으로 남았다. (vendor PHP 는 신버전·JS/CSS 는 구버전 → repeater/
+# builder/toggle-buttons 같은 컴포넌트 파손 위험.) 짝지어지지 않은 채 public/…/filament 가 main 에 새로 생기면 평탄화의
+# git mv 가 js/js 처럼 중첩시킬 수 있으므로, 평탄화 전에 이 경로를 미리 제거한다(dev 쪽 원본은 영향 없음).
+echo "== main 전용 정리: dev 의 Filament 생성 에셋(public/{css,js,fonts}/filament) 제거 =="
+if [ -n "$(git ls-files -- public/css/filament public/js/filament public/fonts/filament)" ]; then
+  git rm -rf --ignore-unmatch --quiet -- public/css/filament public/js/filament public/fonts/filament
+  git commit -m "Drop dev's public/*/filament assets from main (regenerated from vendor in the build)"
+else
+  echo "제거할 내용이 없습니다(이미 정리된 상태)."
+fi
+rm -rf public/css/filament public/js/filament public/fonts/filament
+
 # 도큐먼트 루트를 public/ 하위 폴더로 지정할 수 없는(또는 서버 담당자에게 요청해야 하는)
 # 공유호스팅 대응 — main은 저장소 전체를 그대로 웹 루트(예: public_html)에 올리는 배포
 # 스냅샷이므로 public/ 안의 공개 파일들을 저장소 루트로 평탄화한다. index.php/install.php/
@@ -245,12 +261,38 @@ docker exec "$CONTAINER" sh -c "
 echo "== 3/6: 프로덕션 vendor를 빌드합니다 (--no-dev --optimize-autoloader) =="
 docker exec "$CONTAINER" sh -c "cd $BUILD_DIR && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts"
 
-echo "== 4/6: 빌드된 vendor를 main 작업 디렉토리로 복사합니다 =="
+# 2026-10-26: Filament 의 js/css/fonts 에셋은 vendor/filament/*/dist 의 '복사본'이라 vendor 와 항상 같은 버전이어야 한다.
+# main 은 public/ 이 없으니 BUILD_DIR(= main 의 평탄화된 사본)에서 public_path() 가 저장소 루트(bootstrap/app.php 의
+# usePublicPath)를 가리키고, 여기서 `filament:assets` 를 돌리면 루트의 js|css|fonts/filament 가 새 vendor 기준으로 만들어진다.
+# cherry-pick 에 맡기지 않고 매번 통째로 다시 만드는 이유: dev 의 public/…/filament 변경을 git 이 vendor/…/dist 로 잘못 짝지어
+# 평탄화된 루트 에셋이 옛 버전으로 남은 사고가 있었다(위 '생성 에셋 제거' 주석). 항상 지우고 재생성하므로 멱등이고, 이전 버전의
+# 해시 이름 폰트 같은 잔재도 남지 않는다. .env 는 지워서 개발자 환경(DB·캐시 설정)과 무관하게 같은 결과가 나오게 한다.
+# BUILD_DIR 에는 storage/framework/{cache,sessions,views}·storage/logs 가 없어(2단계 tar 에서 제외) 뷰 컴파일러가 부팅 중 죽으므로 만들어 준다.
+echo "== 3b/6: Filament 에셋(js/css/fonts)을 새 vendor 기준으로 재생성합니다 (filament:assets) =="
+docker exec "$CONTAINER" sh -c "
+  cd $BUILD_DIR &&
+  rm -f .env &&
+  rm -rf js/filament css/filament fonts/filament &&
+  mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views &&
+  php artisan filament:assets --no-interaction >/tmp/filament_assets_\$\$.log 2>&1 || { cat /tmp/filament_assets_\$\$.log; exit 1; }
+  rm -f /tmp/filament_assets_\$\$.log
+  for d in js css fonts; do
+    [ -d $BUILD_DIR/\$d/filament ] || { echo \"오류: \$d/filament 가 생성되지 않았습니다(public_path()가 평탄화 위치를 가리키는지 확인)\" >&2; exit 1; }
+  done
+"
+
+echo "== 4/6: 빌드된 vendor와 Filament 에셋을 main 작업 디렉토리로 복사합니다 =="
 rm -rf "$REPO_ROOT/vendor"
 # docker cp의 목적지는 (컨테이너 내부 경로와 달리) 실제 Windows 호스트 경로라서 여기서만
 # MSYS_NO_PATHCONV을 잠깐 풀어 정상적인 /c/... → C:\... 변환이 되게 한다. 컨테이너 쪽 소스 경로
 # (container:/tmp/...)는 콜론 뒤에 오는 경로라 애초에 이 변환 대상이 아니므로 영향 없다.
 env -u MSYS_NO_PATHCONV docker cp "$CONTAINER:$BUILD_DIR/vendor" "$REPO_ROOT/vendor"
+# 목적지가 이미 있으면 docker cp 가 그 안쪽(filament/filament)에 중첩 복사하므로 먼저 지운다.
+rm -rf "$REPO_ROOT/js/filament" "$REPO_ROOT/css/filament" "$REPO_ROOT/fonts/filament"
+for asset_dir in js css fonts; do
+  mkdir -p "$REPO_ROOT/$asset_dir"
+  env -u MSYS_NO_PATHCONV docker cp "$CONTAINER:$BUILD_DIR/$asset_dir/filament" "$REPO_ROOT/$asset_dir/filament"
+done
 
 echo "== 5/6: main에 커밋하고 푸시합니다 =="
 git add vendor/
@@ -258,6 +300,55 @@ if git diff --cached --quiet; then
   echo "vendor에 변경사항이 없습니다(이미 최신 상태)."
 else
   git commit -m "Rebuild deploy vendor from dev ($(date +%Y-%m-%d))"
+fi
+# 경로를 지정한 git add 는 삭제(옛 버전 해시 이름 폰트 등)도 함께 스테이징한다. 저장소 루트 전체를 add -A 하지 않는 이유는 위 평탄화 주석 참고.
+git add -- js/filament css/filament fonts/filament
+if git diff --cached --quiet; then
+  echo "Filament 에셋에 변경사항이 없습니다(이미 최신 상태)."
+else
+  git commit -m "Regenerate Filament assets (filament:assets) from rebuilt vendor ($(date +%Y-%m-%d))"
+fi
+
+# 2026-10-26 점검: 푸시 전에 main 의 상태를 스스로 검증한다. 하나라도 어긋나면 푸시하지 않고 중단한다
+# (main 이 체크아웃된 채 남으므로 확인 뒤 `git checkout dev`).
+echo "== 점검: Filament 에셋 == vendor dist, dev 전용 경로 미혼입 =="
+verify_failed=0
+# (1) 루트의 js|css|fonts/filament 의 모든 파일은 vendor/filament/*/dist 안의 어떤 파일과 '바이트까지 같아야' 한다
+#     (filament:assets 는 dist 파일을 그대로 복사한다). 에셋이 옛 버전으로 남으면 새 dist 에는 같은 내용이 없어 여기서 걸린다.
+#     커밋된 상태(git blob)를 비교하므로 작업 디렉토리 줄바꿈 변환과 무관하다.
+dist_blobs_file="$(mktemp)"
+git ls-tree -r HEAD -- vendor/filament | awk -F'[ \t]' '$4 ~ /\/dist\//{print $3}' | sort -u > "$dist_blobs_file"
+asset_count=0
+stale_assets=""
+while IFS=$'\t' read -r blob path; do
+  asset_count=$((asset_count + 1))
+  if ! grep -qxF "$blob" "$dist_blobs_file"; then
+    stale_assets="$stale_assets
+  $path"
+  fi
+done < <(git ls-tree -r HEAD -- js/filament css/filament fonts/filament | awk -F'[ \t]' '{print $3 "\t" $4}')
+rm -f "$dist_blobs_file"
+if [ "$asset_count" -eq 0 ]; then
+  echo "점검 실패: main 에 js|css|fonts/filament 에셋이 하나도 없습니다." >&2
+  verify_failed=1
+elif [ -n "$stale_assets" ]; then
+  echo "점검 실패: vendor/filament/*/dist 와 내용이 다른(옛 버전) 에셋이 있습니다:$stale_assets" >&2
+  verify_failed=1
+else
+  echo "  OK: Filament 에셋 ${asset_count}개 모두 vendor dist 와 일치"
+fi
+# (2) main 에 있으면 안 되는 dev 전용 경로(앞에서 지우거나 평탄화한 것들)가 추적되고 있지 않은지.
+leaked_paths="$(git ls-files -- .claude .github CLAUDE.md PROJECT.md claude_code_prompts.md public | head -5 || true)"
+if [ -n "$leaked_paths" ]; then
+  echo "점검 실패: main 에 있으면 안 되는 경로가 추적되고 있습니다(상위 5개):" >&2
+  echo "$leaked_paths" >&2
+  verify_failed=1
+else
+  echo "  OK: dev 전용 경로(.claude/.github/CLAUDE.md/PROJECT.md/claude_code_prompts.md/public) 없음"
+fi
+if [ "$verify_failed" -ne 0 ]; then
+  echo "오류: 점검에 실패해 푸시하지 않고 중단합니다(현재 main 이 체크아웃된 상태 — 원인 확인 후 'git checkout dev')." >&2
+  exit 1
 fi
 # 2026-08-19에 origin이 lfboard-dev로 바뀌고 main 브랜치가 없어져(실제 배포 저장소는
 # 별도 lfboard 리모트, https://github.com/piseok/LFBoard.git) 이 줄이 stale해졌었는데
