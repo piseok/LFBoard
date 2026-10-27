@@ -42,6 +42,11 @@ return [
 
         'form' => [
 
+            'password' => [
+                'label' => '目前密碼',
+                'validation_attribute' => '目前密碼',
+            ],
+
             'code' => [
 
                 'label' => '輸入來自驗證器應用程式的 6 位數驗證碼',
@@ -53,6 +58,8 @@ return [
                 'messages' => [
 
                     'invalid' => '您輸入的驗證碼無效。',
+
+                    'rate_limited' => '嘗試次數過多，請稍後再試。',
 
                 ],
 

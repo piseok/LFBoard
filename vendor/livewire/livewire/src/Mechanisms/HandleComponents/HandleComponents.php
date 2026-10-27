@@ -239,7 +239,7 @@ class HandleComponents extends Mechanism
         });
     }
 
-    protected function hydratePropertyUpdate($valueOrTuple, $context, $path)
+    protected function hydratePropertyUpdate($valueOrTuple, $context, $path, $raw = null)
     {
         if (! Utils::isSyntheticTuple($value = $tuple = $valueOrTuple)) return $value;
 
@@ -252,8 +252,14 @@ class HandleComponents extends Mechanism
 
         $synth = $this->propertySynth($meta['s'], $context, $path);
 
-        return $synth->hydrate($value, $meta, function ($name, $child) {
-            return $child;
+        return $synth->hydrate($value, $meta, function ($name, $child) use ($context, $path, $raw) {
+            if ($raw === null || is_object($child)) return $child;
+
+            $childPath = "{$path}.{$name}";
+
+            if (! $childMeta = $this->getMetaForPath($raw, $childPath)) return $child;
+
+            return $this->hydratePropertyUpdate([$child, $childMeta], $context, $childPath, $raw);
         });
     }
 
@@ -279,12 +285,14 @@ class HandleComponents extends Mechanism
 
             $viewContext = new ViewContext;
 
-            $html = $view->render(function ($view) use ($viewContext) {
-                // Extract leftover slots, sections, and pushes before they get flushed...
-                $viewContext->extractFromEnvironment($view->getFactory());
-            });
-
-            $revertA(); $revertB();
+            try {
+                $html = $view->render(function ($view) use ($viewContext) {
+                    // Extract leftover slots, sections, and pushes before they get flushed...
+                    $viewContext->extractFromEnvironment($view->getFactory());
+                });
+            } finally {
+                $revertA(); $revertB();
+            }
 
             $html = Utils::insertAttributesIntoHtmlRoot($html, [
                 'wire:id' => $component->getId(),
@@ -323,9 +331,11 @@ class HandleComponents extends Mechanism
     {
         array_push(static::$renderStack, $component);
 
-        return tap($callback(), function () {
+        try {
+            return $callback();
+        } finally {
             array_pop(static::$renderStack);
-        });
+        }
     }
 
     protected function updateProperties($component, $updates, $data, $context)
@@ -364,7 +374,12 @@ class HandleComponents extends Mechanism
         if (empty($segments)) {
             $this->setComponentPropertyAwareOfTypes($component, $property, $value);
         } else {
-            $propertyValue = $component->$property;
+            // An uninitialized typed property has no value to drill into. Start from
+            // an empty structure, like missing nested keys below, so the assignment
+            // runs through the usual typed property handling instead of throwing...
+            $propertyValue = Utils::propertyIsTypedAndUninitialized($component, $property)
+                ? []
+                : $component->$property;
 
             $this->setComponentPropertyAwareOfTypes($component, $property,
                 $this->recursivelySetValue($property, $propertyValue, $value, $segments, 0, $context)
@@ -380,7 +395,7 @@ class HandleComponents extends Mechanism
 
         // If we have meta data already for this property, let's use that to get a synth...
         if ($meta) {
-            return $this->hydratePropertyUpdate([$value, $meta], $context, $path);
+            return $this->hydratePropertyUpdate([$value, $meta], $context, $path, $raw);
         }
 
         // If we don't, let's check to see if it's a typed property and fetch the synth that way...

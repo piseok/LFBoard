@@ -49,6 +49,10 @@
         @apply h-auto! p-3!;
     }
 
+    & .filepond--drop-label[style*='visibility: hidden'] {
+        @apply min-h-0!;
+    }
+
     & .filepond--drop-label label {
         @apply p-0!;
     }
@@ -145,11 +149,11 @@
             }
 
             & .fi-fo-file-upload-editor-control-panel-footer {
-                @apply flex items-center gap-3 px-4 py-3;
+                @apply flex items-center justify-end gap-3 px-4 py-3;
             }
 
-            & .fi-fo-file-upload-editor-control-panel-reset-action {
-                @apply ml-auto;
+            & .fi-fo-file-upload-editor-control-panel-reset-action-ctn {
+                @apply flex justify-end;
             }
         }
 

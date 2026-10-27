@@ -1,4 +1,6 @@
 .fi-modal {
+    @apply outline-none;
+
     &.fi-modal-slide-over,
     &.fi-width-screen {
         & > .fi-modal-window-ctn > .fi-modal-window {
@@ -128,19 +130,24 @@
         }
     }
 
+    /* Like the modal itself, the window container does not show a focus outline when it receives focus from the focus trap, such as when the modal has no tabbable content. */
     & > .fi-modal-window-ctn {
-        @apply fixed inset-0 z-40 grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center sm:grid-rows-[1fr_auto_3fr];
+        @apply fixed inset-0 z-40 grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center outline-none sm:grid-rows-[1fr_auto_3fr];
 
         &.fi-clickable {
             @apply cursor-pointer;
         }
     }
 
+    &.fi-modal-click-through {
+        @apply pointer-events-none;
+    }
+
     &:not(.fi-modal-slide-over):not(.fi-width-screen) {
         & > .fi-modal-window-ctn {
             @apply p-4;
 
-            & .fi-modal-window {
+            & > .fi-modal-window {
                 @apply mx-auto rounded-xl;
             }
         }
@@ -158,8 +165,9 @@
         }
     }
 
+    /* Like the modal itself, the window does not show a focus outline when it receives focus from the focus trap, such as when it carries the `autofocus` attribute. */
     & > .fi-modal-window-ctn > .fi-modal-window {
-        @apply pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10;
+        @apply pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 outline-none dark:bg-gray-900 dark:ring-white/10;
 
         & .fi-modal-header {
             @apply flex px-6 pt-6;
@@ -407,7 +415,7 @@
 
     &.fi-modal-has-sticky-footer {
         & > .fi-modal-window-ctn > .fi-modal-window > .fi-modal-footer {
-            @apply sticky bottom-0 border-t border-gray-200 bg-white py-5 dark:border-white/10 dark:bg-gray-900;
+            @apply sticky bottom-0 z-10 border-t border-gray-200 bg-white py-5 dark:border-white/10 dark:bg-gray-900;
         }
     }
 

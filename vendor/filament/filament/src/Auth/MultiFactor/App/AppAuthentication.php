@@ -12,6 +12,7 @@ use Filament\Auth\MultiFactor\App\Actions\RegenerateAppAuthenticationRecoveryCod
 use Filament\Auth\MultiFactor\App\Actions\SetUpAppAuthenticationAction;
 use Filament\Auth\MultiFactor\App\Contracts\HasAppAuthentication;
 use Filament\Auth\MultiFactor\App\Contracts\HasAppAuthenticationRecovery;
+use Filament\Auth\MultiFactor\Concerns\HasCacheStore;
 use Filament\Auth\MultiFactor\Contracts\MultiFactorAuthenticationProvider;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\OneTimeCodeInput;
@@ -21,18 +22,22 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Cache\Lock;
+use Illuminate\Cache\Repository;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use LogicException;
 use PragmaRX\Google2FAQRCode\Google2FA;
 use SensitiveParameter;
 
+use function Filament\Support\encode_key_segments;
+
 class AppAuthentication implements MultiFactorAuthenticationProvider
 {
+    use HasCacheStore;
+
     protected bool $isRecoverable = false;
 
     protected bool $canRegenerateRecoveryCodes = true;
@@ -152,6 +157,7 @@ class AppAuthentication implements MultiFactorAuthenticationProvider
             class_exists(Writer::class)
             && class_exists(ImageRenderer::class)
             && (! extension_loaded('imagick'))
+            && (! str_starts_with($inlineQrCode, 'data:'))
         ) {
             $inlineQrCode = 'data:image/svg+xml;base64,' . base64_encode($inlineQrCode);
         }
@@ -178,32 +184,86 @@ class AppAuthentication implements MultiFactorAuthenticationProvider
             return $this->google2FA->verifyKey($secret, $code, $this->getCodeWindow());
         }
 
-        $cacheKey = 'filament.app_authentication_codes.' . md5($secret . $code);
+        // The key deliberately excludes the code itself, so that it records the timestep of the
+        // last accepted code rather than a marker for one specific code. RFC 6238 requires that
+        // a successful verification rejects that code and every earlier one, not just a repeat
+        // of the same code.
+        $cacheKey = 'filament:auth:app_authentication:code:' . hash('sha256', $secret);
+        $legacyCacheKey = 'filament.app_authentication_codes.' . md5($secret);
+        $cache = $this->getCacheRepository();
 
-        $timestamp = $this->google2FA->verifyKeyNewer($secret, $code, cache()->get($cacheKey), $this->getCodeWindow());
+        $verifyCode = function (?Lock $lock, Repository $cache) use ($cacheKey, $legacyCacheKey, $code, $secret): bool {
+            // Passing an initial `$lastAcceptedTimestamp` makes `verifyKeyNewer()` return the
+            // matched period instead of `true`, so future codes are cached correctly.
+            $lastAcceptedTimestamp = $this->getLastAcceptedCodeTimestamp($cache, $cacheKey, $legacyCacheKey);
 
-        if ($timestamp !== false) {
-            if ($timestamp === true) {
-                $timestamp = $this->google2FA->getTimestamp();
+            if ($lastAcceptedTimestamp === false) {
+                return false;
             }
 
-            cache()->put($cacheKey, $timestamp, ($this->getCodeWindow() + 1) * 60);
+            $lastAcceptedTimestamp ??= $this->google2FA->getTimestamp() - $this->getCodeWindow() - 1;
 
-            return true;
+            $timestamp = $this->google2FA->verifyKeyNewer($secret, $code, $lastAcceptedTimestamp, $this->getCodeWindow());
+
+            if ($timestamp === false) {
+                return false;
+            }
+
+            $lastAcceptedTimestamp = $this->getLastAcceptedCodeTimestamp($cache, $cacheKey, $legacyCacheKey);
+
+            if (
+                ($lastAcceptedTimestamp === false)
+                || (($lastAcceptedTimestamp !== null) && ($timestamp <= $lastAcceptedTimestamp))
+                || (($lock !== null) && (! $lock->isOwnedByCurrentProcess()))
+            ) {
+                return false;
+            }
+
+            // Preserve replay protection for workers still using the old key during deployment.
+            return $cache->forever($legacyCacheKey, $timestamp) && $cache->forever($cacheKey, $timestamp);
+        };
+
+        return $this->executeWithCacheLock($cache, "{$cacheKey}:lock", $verifyCode);
+    }
+
+    protected function getLastAcceptedCodeTimestamp(Repository $cache, string $cacheKey, string $legacyCacheKey): int | false | null
+    {
+        $lastAcceptedTimestamp = null;
+
+        foreach ([$cacheKey, $legacyCacheKey] as $key) {
+            $timestamp = $cache->get($key);
+
+            if (is_string($timestamp) && ctype_digit($timestamp)) {
+                $timestamp = (int) $timestamp;
+            }
+
+            if ($timestamp === null) {
+                continue;
+            }
+
+            if (! is_int($timestamp)) {
+                return false;
+            }
+
+            $lastAcceptedTimestamp = ($lastAcceptedTimestamp === null) ? $timestamp : max($lastAcceptedTimestamp, $timestamp);
         }
 
-        return false;
+        return $lastAcceptedTimestamp;
     }
 
     public function verifyRecoveryCode(#[SensitiveParameter] string $recoveryCode, ?HasAppAuthenticationRecovery $user = null): bool
     {
         $user ??= Filament::auth()->user();
 
-        $lockKey = 'filament.app_authentication_recovery_codes.' . md5(
-            $user::class . ':' . (($user instanceof Authenticatable) ? $user->getAuthIdentifier() : spl_object_id($user)),
-        );
+        $lockKey = 'filament:auth:app_authentication:recovery_codes:' . hash(
+            'sha256',
+            encode_key_segments($user::class, (string) (($user instanceof Authenticatable) ? $user->getAuthIdentifier() : spl_object_id($user))),
+        ) . ':lock';
 
-        return Cache::lock($lockKey, 10)->block(10, fn (): bool => DB::transaction(function () use ($user, $recoveryCode): bool {
+        $cache = $this->getCacheRepository();
+        $connection = $user->getConnection(); /** @phpstan-ignore-line */
+
+        return $this->executeWithCacheLock($cache, $lockKey, fn (?Lock $lock): bool => $connection->transaction(function () use ($lock, $user, $recoveryCode): bool {
             $lockedUser = $user
                 ->newQuery() /** @phpstan-ignore-line */
                 ->whereKey($user->getKey()) /** @phpstan-ignore-line */
@@ -227,11 +287,17 @@ class AppAuthentication implements MultiFactorAuthenticationProvider
                 $remainingCodes[] = $hashedRecoveryCode;
             }
 
-            if ($isValid) {
-                $lockedUser->saveAppAuthenticationRecoveryCodes($remainingCodes); /** @phpstan-ignore-line */
+            if (! $isValid) {
+                return false;
             }
 
-            return $isValid;
+            if (($lock !== null) && (! $lock->isOwnedByCurrentProcess())) {
+                return false;
+            }
+
+            $lockedUser->saveAppAuthenticationRecoveryCodes($remainingCodes); /** @phpstan-ignore-line */
+
+            return true;
         }));
     }
 
@@ -342,13 +408,14 @@ class AppAuthentication implements MultiFactorAuthenticationProvider
         return [
             OneTimeCodeInput::make('code')
                 ->label(__('filament-panels::auth/multi-factor/app/provider.login_form.code.label'))
+                ->submitOnCompletion()
                 ->belowContent(fn (Get $get): Action => Action::make('useRecoveryCode')
                     ->label(__('filament-panels::auth/multi-factor/app/provider.login_form.code.actions.use_recovery_code.label'))
                     ->link()
                     ->action(fn (Set $set) => $set('useRecoveryCode', true))
                     ->visible(fn (): bool => $isRecoverable && (! $get('useRecoveryCode'))))
                 ->validationAttribute(__('filament-panels::auth/multi-factor/app/provider.login_form.code.validation_attribute'))
-                ->required(fn (Get $get): bool => (! $isRecoverable) || blank($get('recoveryCode')))
+                ->required(fn (Get $get): bool => (! $isRecoverable) || (! $get('useRecoveryCode')) || blank($get('recoveryCode')))
                 ->rule(function () use ($user): Closure {
                     return function (string $attribute, #[SensitiveParameter] $value, Closure $fail) use ($user): void {
                         if ($this->verifyCode($value, $this->getSecret($user), shouldPreventCodeReuse: true)) {
@@ -363,6 +430,7 @@ class AppAuthentication implements MultiFactorAuthenticationProvider
                 ->validationAttribute(__('filament-panels::auth/multi-factor/app/provider.login_form.recovery_code.validation_attribute'))
                 ->password()
                 ->revealable(Filament::arePasswordsRevealable())
+                ->autocomplete('one-time-code')
                 ->rule(function () use ($user): Closure {
                     return function (string $attribute, #[SensitiveParameter] mixed $value, Closure $fail) use ($user): void {
                         if (blank($value)) {

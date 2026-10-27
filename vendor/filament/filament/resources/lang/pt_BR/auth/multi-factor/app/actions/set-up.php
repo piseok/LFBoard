@@ -42,6 +42,11 @@ return [
 
         'form' => [
 
+            'password' => [
+                'label' => 'Senha atual',
+                'validation_attribute' => 'senha atual',
+            ],
+
             'code' => [
 
                 'label' => 'Digite o código de 6 dígitos do app autenticador',
@@ -53,6 +58,8 @@ return [
                 'messages' => [
 
                     'invalid' => 'O código informado é inválido.',
+
+                    'rate_limited' => 'Muitas tentativas. Tente novamente mais tarde.',
 
                 ],
 

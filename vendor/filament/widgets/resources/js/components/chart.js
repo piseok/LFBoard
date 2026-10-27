@@ -1,6 +1,7 @@
 import Chart from 'chart.js/auto'
 import { color } from 'chart.js/helpers'
 import 'chartjs-adapter-luxon'
+import readCustomProperties from '../utilities/custom-properties.js'
 
 const darken = (value, amount) => {
     if (Array.isArray(value)) {
@@ -20,11 +21,15 @@ if (
     Chart.register(...window.filamentChartJsGlobalPlugins)
 }
 
-Chart.defaults.plugins.legend.labels.boxWidth = 12
 Chart.defaults.plugins.legend.position = 'bottom'
 
 export default function chart({ cachedData, options, type }) {
     return {
+        isDestroyed: false,
+        chartDataEventTarget: null,
+        chartDataListener: null,
+        themeEffect: null,
+
         userBackgroundColor: options?.backgroundColor,
         userBorderColor: options?.borderColor,
         userTextColor: options?.color,
@@ -33,13 +38,36 @@ export default function chart({ cachedData, options, type }) {
         userYGridColor: options?.scales?.y?.grid?.color,
         userRadialGridColor: options?.scales?.r?.grid?.color,
         userRadialTicksColor: options?.scales?.r?.ticks?.color,
+        userTooltipBackgroundColor: options?.plugins?.tooltip?.backgroundColor,
+        userTooltipTitleColor: options?.plugins?.tooltip?.titleColor,
+        userTooltipBodyColor: options?.plugins?.tooltip?.bodyColor,
+        userTooltipBorderColor: options?.plugins?.tooltip?.borderColor,
+        userLineTension: options?.tension,
+        userPointStyle: options?.pointStyle,
+        userBarBorderRadius: options?.borderRadius,
+        userTooltipCornerRadius: options?.plugins?.tooltip?.cornerRadius,
+        userTooltipBorderWidth: options?.plugins?.tooltip?.borderWidth,
+        userLegendBorderRadius: options?.plugins?.legend?.labels?.borderRadius,
+        userLegendUseBorderRadius:
+            options?.plugins?.legend?.labels?.useBorderRadius,
+        userLegendBoxWidth: options?.plugins?.legend?.labels?.boxWidth,
+        userBorderWidth: options?.borderWidth,
+        userPointRadius: options?.pointRadius,
 
         init() {
-            this.$wire.$on('updateChartData', ({ data }) =>
-                this.updateChartData(data),
+            this.chartDataEventTarget = this.$wire.$el
+            this.chartDataListener = ({ detail: { data } }) =>
+                this.updateChartData(data)
+            this.chartDataEventTarget.addEventListener(
+                'updateChartData',
+                this.chartDataListener,
             )
 
-            Alpine.effect(() => {
+            this.themeEffect = Alpine.effect(() => {
+                if (this.isDestroyed) {
+                    return
+                }
+
                 Alpine.store('theme')
 
                 this.$nextTick(() => this.updateChartTheme())
@@ -65,6 +93,10 @@ export default function chart({ cachedData, options, type }) {
             // exits early on that first run; otherwise the effect would tear down and
             // recreate the chart on every mount.
             this.$nextTick(() => {
+                if (this.isDestroyed) {
+                    return
+                }
+
                 this.initChart()
 
                 this.resizeObserver = new ResizeObserver(() =>
@@ -99,11 +131,9 @@ export default function chart({ cachedData, options, type }) {
             options.animation.duration ??= 0
             options.font ??= {}
             options.font.family ??= fontFamily
-            options.borderWidth ??= 2
             options.responsive ??= false
             options.maintainAspectRatio ??= hasMaxHeight
             options.pointHitRadius ??= 4
-            options.pointRadius ??= 2
             options.scales ??= {}
             options.scales.x ??= {}
             options.scales.x.border ??= {}
@@ -148,6 +178,7 @@ export default function chart({ cachedData, options, type }) {
             }
 
             this.applyChartColors(options)
+            this.applyChartCustomProperties(options)
             this.normalizeDatasets(cachedData)
 
             new Chart(this.$refs.canvas, {
@@ -204,12 +235,27 @@ export default function chart({ cachedData, options, type }) {
             }
 
             this.applyChartColors(chart.options)
-            chart.update('none')
+            this.applyChartCustomProperties(chart.options)
+
+            // Not `'none'`: that is one of Chart.js' "direct update" modes, which reuse a
+            // cached snapshot of the options shared between a dataset's elements instead of
+            // refreshing it. Every per-element option - bar and arc colors, point colors,
+            // point radius and style - would keep the value it was built with. `'resize'`
+            // refreshes them, and its transition is already zero-duration, so nothing
+            // animates. It is the mode `updateChartData()` uses for the same reason.
+            chart.update('resize')
         },
 
         applyChartColors(options) {
-            const { backgroundColor, borderColor, textColor, gridColor } =
-                this.getChartColors()
+            const {
+                backgroundColor,
+                borderColor,
+                textColor,
+                gridColor,
+                tooltipBackgroundColor,
+                tooltipTextColor,
+                tooltipBorderColor,
+            } = this.getChartColors()
 
             const resolvedBorderColor = this.userBorderColor ?? borderColor
 
@@ -223,6 +269,21 @@ export default function chart({ cachedData, options, type }) {
             options.elements ??= {}
             options.elements.bar ??= {}
             options.elements.bar.borderColor = resolvedBorderColor
+
+            // The tooltip color elements arrived after the others, so a published copy of
+            // the view may not have them; without them Chart.js keeps its own colors.
+            if (this.$refs.tooltipBackgroundColorElement) {
+                options.plugins ??= {}
+                options.plugins.tooltip ??= {}
+                options.plugins.tooltip.backgroundColor =
+                    this.userTooltipBackgroundColor ?? tooltipBackgroundColor
+                options.plugins.tooltip.titleColor =
+                    this.userTooltipTitleColor ?? tooltipTextColor
+                options.plugins.tooltip.bodyColor =
+                    this.userTooltipBodyColor ?? tooltipTextColor
+                options.plugins.tooltip.borderColor =
+                    this.userTooltipBorderColor ?? tooltipBorderColor
+            }
 
             if (['doughnut', 'pie', 'polarArea'].includes(type)) {
                 options.elements.arc ??= {}
@@ -254,7 +315,7 @@ export default function chart({ cachedData, options, type }) {
         },
 
         getChart() {
-            if (!this.$refs.canvas) {
+            if (this.isDestroyed || !this.$refs.canvas) {
                 return null
             }
 
@@ -283,6 +344,9 @@ export default function chart({ cachedData, options, type }) {
         },
 
         getChartColors() {
+            const sentinelColor = (element) =>
+                element ? getComputedStyle(element).color : null
+
             return {
                 backgroundColor: getComputedStyle(
                     this.$refs.backgroundColorElement,
@@ -291,10 +355,97 @@ export default function chart({ cachedData, options, type }) {
                     .color,
                 textColor: getComputedStyle(this.$refs.textColorElement).color,
                 gridColor: getComputedStyle(this.$refs.gridColorElement).color,
+                tooltipBackgroundColor: sentinelColor(
+                    this.$refs.tooltipBackgroundColorElement,
+                ),
+                tooltipTextColor: sentinelColor(
+                    this.$refs.tooltipTextColorElement,
+                ),
+                tooltipBorderColor: sentinelColor(
+                    this.$refs.tooltipBorderColorElement,
+                ),
+            }
+        },
+
+        applyChartCustomProperties(options) {
+            const {
+                lineTension,
+                pointStyle,
+                barBorderRadius,
+                tooltipCornerRadius,
+                tooltipBorderWidth,
+                legendBorderRadius,
+                legendBoxWidth,
+                borderWidth,
+                pointRadius,
+            } = this.getChartCustomProperties()
+
+            options.borderWidth = this.userBorderWidth ?? borderWidth
+            options.tension = this.userLineTension ?? lineTension
+            options.pointStyle = this.userPointStyle ?? pointStyle
+            options.pointRadius = this.userPointRadius ?? pointRadius
+
+            if (type === 'bar') {
+                options.borderRadius =
+                    this.userBarBorderRadius ?? barBorderRadius
+            }
+
+            options.plugins ??= {}
+            options.plugins.tooltip ??= {}
+            options.plugins.tooltip.cornerRadius =
+                this.userTooltipCornerRadius ?? tooltipCornerRadius
+            options.plugins.tooltip.borderWidth =
+                this.userTooltipBorderWidth ?? tooltipBorderWidth
+
+            const resolvedLegendBorderRadius =
+                this.userLegendBorderRadius ?? legendBorderRadius
+
+            options.plugins.legend ??= {}
+            options.plugins.legend.labels ??= {}
+            options.plugins.legend.labels.borderRadius =
+                resolvedLegendBorderRadius
+            // Chart.js ignores the radius unless this is on, and treats a radius of `0` as
+            // "inherit from the data" rather than "square", so it is derived rather than
+            // exposed as a property of its own.
+            options.plugins.legend.labels.useBorderRadius =
+                this.userLegendUseBorderRadius ?? resolvedLegendBorderRadius > 0
+            options.plugins.legend.labels.boxWidth =
+                this.userLegendBoxWidth ?? legendBoxWidth
+        },
+
+        // The parts of a chart that a stylesheet cannot otherwise reach, since Chart.js
+        // paints them onto a bare `<canvas>`. This covers the static appearance of what is
+        // painted, including everything Filament pins to a value of its own; how a chart
+        // behaves - animation, hit areas, which scales it shows - belongs in `getOptions()`.
+        // Each fallback is the default it stands in for: Chart.js' own, except where the
+        // panel's design language asks for something else. Bars and legend swatches are
+        // slightly rounded, since nothing else in Filament has square corners, and the
+        // tooltip's `4` is the radius `tippy.js` gives every other tooltip in a panel.
+        getChartCustomProperties() {
+            const { number, keyword } = readCustomProperties(this.$el)
+
+            return {
+                lineTension: number('--chart-line-tension', 0),
+                pointStyle: keyword('--chart-point-style', 'circle'),
+                barBorderRadius: number('--chart-bar-border-radius', 2),
+                tooltipCornerRadius: number('--chart-tooltip-corner-radius', 4),
+                tooltipBorderWidth: number('--chart-tooltip-border-width', 0),
+                legendBorderRadius: number('--chart-legend-border-radius', 2),
+                legendBoxWidth: number('--chart-legend-box-width', 12),
+                borderWidth: number('--chart-border-width', 2),
+                pointRadius: number('--chart-point-radius', 2),
             }
         },
 
         destroy() {
+            const chart = this.getChart()
+            this.isDestroyed = true
+
+            this.chartDataEventTarget.removeEventListener(
+                'updateChartData',
+                this.chartDataListener,
+            )
+            Alpine.release(this.themeEffect)
             this.resizeObserver?.disconnect()
             this.dprChangeHandler &&
                 window.removeEventListener('resize', this.dprChangeHandler)
@@ -302,7 +453,7 @@ export default function chart({ cachedData, options, type }) {
                 'change',
                 this.systemThemeListener,
             )
-            this.getChart()?.destroy()
+            chart?.destroy()
         },
     }
 }

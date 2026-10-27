@@ -6,24 +6,29 @@ use BackedEnum;
 use Closure;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Concerns\HasLabel;
-use Filament\Schemas\Components\Contracts\CanConcealComponents;
+use Filament\Schemas\Components\Tabs;
+use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\HasBadge;
 use Filament\Support\Concerns\HasBadgeTooltip;
 use Filament\Support\Concerns\HasIcon;
 use Filament\Support\Concerns\HasIconPosition;
 use Filament\Support\Enums\IconPosition;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 
-class Tab extends Component implements CanConcealComponents
+class Tab extends Component implements HasEmbeddedView
 {
     use HasBadge;
     use HasBadgeTooltip;
     use HasIcon;
     use HasIconPosition;
     use HasLabel;
+
+    protected ?string $publishedViewOverrideCheckPath = 'filament-schemas::components.tabs.tab';
 
     protected ?Closure $modifyQueryUsing = null;
 
@@ -34,11 +39,6 @@ class Tab extends Component implements CanConcealComponents
     protected IconPosition | string | Closure | null $badgeIconPosition = null;
 
     protected bool | Closure $isBadgeDeferred = false;
-
-    /**
-     * @var view-string
-     */
-    protected string $view = 'filament-schemas::components.tabs.tab';
 
     final public function __construct(string | Htmlable | Closure | null $label = null)
     {
@@ -75,11 +75,6 @@ class Tab extends Component implements CanConcealComponents
         }
 
         return parent::getAllColumns();
-    }
-
-    public function canConcealComponents(): bool
-    {
-        return true;
     }
 
     public function query(?Closure $callback): static
@@ -147,6 +142,77 @@ class Tab extends Component implements CanConcealComponents
     public function isBadgeDeferred(): bool
     {
         return (bool) $this->evaluate($this->isBadgeDeferred);
+    }
+
+    public function getTabId(): string
+    {
+        if (filled($id = $this->getExtraAttributeBag()->get('id'))) {
+            return $id;
+        }
+
+        /** @var Tabs $tabs */
+        $tabs = $this->getContainer()->getParentComponent();
+
+        return 'fi-sc-tab-' . hash('xxh128', json_encode([
+            $this->getLivewire()->getId(),
+            $tabs->getContainer()->getInheritanceKey(),
+            $tabs->getKey() ?? $tabs->getId(),
+            $this->getKey(isAbsolute: false),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    public function getPanelId(): string
+    {
+        return $this->getId() ?? ($this->getTabId() . '-panel');
+    }
+
+    public function getTabVisibilityJs(): string
+    {
+        $hiddenJs = $this->getHiddenJs();
+        $visibleJs = $this->getVisibleJs();
+
+        return match ([filled($hiddenJs), filled($visibleJs)]) {
+            [true, true] => "(! ({$hiddenJs})) && ({$visibleJs})",
+            [true, false] => "! ({$hiddenJs})",
+            [false, true] => "({$visibleJs})",
+            default => 'true',
+        };
+    }
+
+    public function toEmbeddedHtml(): string
+    {
+        $key = $this->getKey(isAbsolute: false);
+        /** @var Tabs $tabs */
+        $tabs = $this->getContainer()->getParentComponent();
+        $livewireProperty = $tabs->getLivewireProperty();
+
+        if (! $tabs->hasTabPanels()) {
+            return '';
+        }
+
+        $isActive = blank($livewireProperty) || (strval($tabs->getLivewire()->{$livewireProperty}) === strval($key));
+
+        $attributes = (new FilamentComponentAttributeBag)
+            ->merge([
+                'aria-labelledby' => e($this->getTabId()),
+                'id' => e($this->getPanelId()),
+                'role' => 'tabpanel',
+                'tabindex' => 0,
+                'wire:key' => ($this->getLivewireKey() ?? $this->getTabId()) . '.container',
+                'x-show' => $this->getTabVisibilityJs(),
+                'x-bind:class' => "{ 'fi-active': isTabSelected(" . Js::from($key) . ') }',
+                'x-on:expand' => 'revealTab(' . Js::from($key) . ')',
+            ], escape: false)
+            ->merge($this->getExtraAttributes(), escape: false)
+            ->class(['fi-sc-tabs-tab']);
+
+        ob_start(); ?>
+
+        <div <?= $attributes->toHtml() ?>>
+            <?= $isActive ? $this->getChildSchema()->toHtml() : '' ?>
+        </div>
+
+        <?php return ob_get_clean();
     }
 
     public function excludeQueryWhenResolvingRecord(bool | Closure $condition = true): static

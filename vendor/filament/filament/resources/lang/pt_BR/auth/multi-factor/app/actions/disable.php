@@ -11,6 +11,10 @@ return [
         'description' => 'Tem certeza de que deseja parar de usar o app autenticador? Desativar isso removerá uma camada extra de segurança da sua conta.',
 
         'form' => [
+            'password' => [
+                'label' => 'Senha atual',
+                'validation_attribute' => 'senha atual',
+            ],
 
             'code' => [
 
@@ -30,6 +34,8 @@ return [
 
                     'invalid' => 'O código informado é inválido.',
 
+                    'rate_limited' => 'Muitas tentativas. Tente novamente mais tarde.',
+
                 ],
 
             ],
@@ -43,6 +49,8 @@ return [
                 'messages' => [
 
                     'invalid' => 'O código de recuperação informado é inválido.',
+
+                    'rate_limited' => 'Muitas tentativas. Tente novamente mais tarde.',
 
                 ],
 

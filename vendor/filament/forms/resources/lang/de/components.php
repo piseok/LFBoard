@@ -104,6 +104,14 @@ return [
 
         ],
 
+        'block_picker' => [
+
+            'no_search_results_message' => 'Keine Blöcke entsprechen Ihrer Suche.',
+
+            'search_prompt' => 'Blöcke durchsuchen',
+
+        ],
+
     ],
 
     'checkbox_list' => [
@@ -122,9 +130,53 @@ return [
 
     ],
 
+    'color_picker' => [
+
+        'panel_label' => 'Farbauswahl',
+
+    ],
+
+    'date_time_picker' => [
+
+        'month_select' => [
+            'label' => 'Monat',
+        ],
+
+        'year_input' => [
+            'label' => 'Jahr',
+        ],
+
+        'hour_input' => [
+            'label' => 'Stunde',
+        ],
+
+        'minute_input' => [
+            'label' => 'Minute',
+        ],
+
+        'second_input' => [
+            'label' => 'Sekunde',
+        ],
+
+    ],
+
     'file_upload' => [
 
+        'actions' => [
+
+            'download' => [
+                'label' => 'Herunterladen',
+            ],
+
+            'open' => [
+                'label' => 'In neuem Tab öffnen',
+            ],
+
+        ],
+
         'editor' => [
+
+            'label' => 'Bildeditor',
 
             'actions' => [
 
@@ -268,6 +320,18 @@ return [
 
         ],
 
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Aktionen',
+            ],
+
+            'reorder' => [
+                'label' => 'Verschieben',
+            ],
+
+        ],
+
         'fields' => [
 
             'key' => [
@@ -338,6 +402,18 @@ return [
     ],
 
     'repeater' => [
+
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Aktionen',
+            ],
+
+            'reorder' => [
+                'label' => 'Verschieben',
+            ],
+
+        ],
 
         'actions' => [
 
@@ -425,6 +501,10 @@ return [
 
                 ],
 
+            ],
+
+            'close_panel' => [
+                'label' => 'Panel schließen',
             ],
 
             'custom_block' => [
@@ -548,6 +628,35 @@ return [
 
                         'color' => [
                             'label' => 'Farbe',
+
+                            'options' => [
+                                'slate' => 'Schiefer',
+                                'gray' => 'Grau',
+                                'zinc' => 'Zink',
+                                'neutral' => 'Neutral',
+                                'stone' => 'Stein',
+                                'mauve' => 'Mauve',
+                                'olive' => 'Olive',
+                                'mist' => 'Nebel',
+                                'taupe' => 'Taupe',
+                                'red' => 'Rot',
+                                'orange' => 'Orange',
+                                'amber' => 'Bernstein',
+                                'yellow' => 'Gelb',
+                                'lime' => 'Limette',
+                                'green' => 'Grün',
+                                'emerald' => 'Smaragd',
+                                'teal' => 'Blaugrün',
+                                'cyan' => 'Cyan',
+                                'sky' => 'Himmel',
+                                'blue' => 'Blau',
+                                'indigo' => 'Indigo',
+                                'violet' => 'Violett',
+                                'purple' => 'Lila',
+                                'fuchsia' => 'Fuchsia',
+                                'pink' => 'Pink',
+                                'rose' => 'Rose',
+                            ],
                         ],
 
                         'custom_color' => [
@@ -562,6 +671,28 @@ return [
 
         ],
 
+        'custom_blocks' => [
+
+            'actions' => [
+
+                'delete' => [
+                    'label' => 'Block löschen',
+                ],
+
+                'edit' => [
+                    'label' => 'Block bearbeiten',
+                ],
+
+            ],
+
+            'no_search_results_message' => 'Keine Blöcke entsprechen Ihrer Suche.',
+
+            'search_label' => 'Blöcke durchsuchen',
+
+            'search_prompt' => 'Blöcke durchsuchen',
+
+        ],
+
         'file_attachments_accepted_file_types_message' => 'Hochgeladene Dateien müssen vom Typ :values sein.',
 
         'file_attachments_max_size_message' => 'Hochgeladene Dateien dürfen nicht größer als :max Kilobytes sein.',
@@ -573,6 +704,10 @@ return [
             'no_search_results_message' => 'Keine Ergebnisse gefunden.',
             'search_prompt' => 'Beginnen Sie mit der Eingabe, um zu suchen...',
             'searching_message' => 'Sucht...',
+        ],
+
+        'toolbar' => [
+            'label' => 'Editor-Werkzeugleiste',
         ],
 
         'tools' => [
@@ -592,6 +727,9 @@ return [
             'h1' => 'Titel',
             'h2' => 'Überschrift',
             'h3' => 'Unterüberschrift',
+            'h4' => 'Überschrift 4',
+            'h5' => 'Überschrift 5',
+            'h6' => 'Überschrift 6',
             'grid' => 'Raster',
             'grid_delete' => 'Raster löschen',
             'highlight' => 'Hervorheben',
@@ -601,6 +739,7 @@ return [
             'link' => 'Link',
             'merge_tags' => 'Merge-Tags',
             'ordered_list' => 'Nummerierte Aufzählung',
+            'paragraph' => 'Absatz',
             'redo' => 'Wiederherstellen',
             'small' => 'Kleiner Text',
             'strike' => 'Durchgestrichen',
@@ -630,6 +769,10 @@ return [
     'select' => [
 
         'actions' => [
+
+            'clear' => [
+                'label' => 'Auswahl löschen',
+            ],
 
             'create_option' => [
 
@@ -675,6 +818,10 @@ return [
 
             ],
 
+            'remove_option' => [
+                'label' => ':label entfernen',
+            ],
+
         ],
 
         'boolean' => [
@@ -694,6 +841,8 @@ return [
 
         'searching_message' => 'Sucht...',
 
+        'search_label' => 'Suchen',
+
         'search_prompt' => 'Beginnen Sie mit der Eingabe, um zu suchen...',
 
     ],
@@ -709,6 +858,10 @@ return [
         ],
 
         'placeholder' => 'Neue Kennzeichnung',
+
+        'tag_added' => 'Hinzugefügt: :tag',
+
+        'tag_removed' => 'Entfernt: :tag',
 
     ],
 

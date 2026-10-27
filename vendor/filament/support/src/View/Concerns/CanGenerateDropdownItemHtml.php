@@ -4,6 +4,7 @@ namespace Filament\Support\View\Concerns;
 
 use BackedEnum;
 use Filament\Support\Enums\IconSize;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Support\View\Components\BadgeComponent;
 use Filament\Support\View\Components\DropdownComponent\ItemComponent;
 use Filament\Support\View\Components\DropdownComponent\ItemComponent\IconComponent;
@@ -45,6 +46,7 @@ trait CanGenerateDropdownItemHtml
         string | Htmlable | null $tooltip = null,
         ?string $type = 'button',
     ): string {
+        $badgeColor ??= 'primary';
         $color ??= 'gray';
 
         if (filled($iconSize) && (! $iconSize instanceof IconSize)) {
@@ -72,13 +74,15 @@ trait CanGenerateDropdownItemHtml
             )
             ->merge([
                 'aria-disabled' => $isDisabled ? 'true' : null,
-                'disabled' => $isDisabled && blank($tooltip),
+                'role' => 'menuitem',
+                'tabindex' => '-1',
                 'type' => match ($tag) {
                     'button' => $type,
                     'form' => 'submit',
                     default => null,
                 },
-                'wire:loading.attr' => $tag === 'button' ? 'disabled' : null,
+                'wire:loading.attr' => $tag === 'button' ? 'aria-disabled' : null,
+                'wire:loading.class' => $tag === 'button' ? $attributes->prepends('fi-disabled') : null,
                 'wire:target' => ($hasLoadingIndicator && $loadingIndicatorTarget) ? $loadingIndicatorTarget : null,
             ], escape: false)
             ->when(
@@ -92,6 +96,10 @@ trait CanGenerateDropdownItemHtml
                 'fi-disabled' => $isDisabled,
             ])
             ->color(ItemComponent::class, $color);
+
+        $loadingDelay = ($icon || $iconAlias || $hasLoadingIndicator)
+            ? config('filament.livewire_loading_delay', 'default')
+            : null;
 
         ob_start(); ?>
 
@@ -114,12 +122,12 @@ trait CanGenerateDropdownItemHtml
             <?php } ?>
             <?= $attributes->toHtml() ?>
         >
-            <?= $icon ? generate_icon_html($icon, $iconAlias, (new ComponentAttributeBag([
-                'wire:loading.remove.delay.' . config('filament.livewire_loading_delay', 'default') => $hasLoadingIndicator,
+            <?= ($icon || $iconAlias) ? generate_icon_html($icon, $iconAlias, (new FilamentComponentAttributeBag([
+                'wire:loading.remove.delay.' . $loadingDelay => $hasLoadingIndicator,
                 'wire:target' => $hasLoadingIndicator ? $loadingIndicatorTarget : false,
-            ]))->color(IconComponent::class, $iconColor), size: $iconSize)->toHtml() : '' ?>
-            <?= $hasLoadingIndicator ? generate_loading_indicator_html((new ComponentAttributeBag([
-                'wire:loading.delay.' . config('filament.livewire_loading_delay', 'default') => '',
+            ]))->color(IconComponent::class, $iconColor), size: $iconSize)?->toHtml() ?? '' : '' ?>
+            <?= $hasLoadingIndicator ? generate_loading_indicator_html((new FilamentComponentAttributeBag([
+                'wire:loading.delay.' . $loadingDelay => '',
                 'wire:target' => $loadingIndicatorTarget,
             ])), size: $iconSize)->toHtml() : '' ?>
 
@@ -136,7 +144,7 @@ trait CanGenerateDropdownItemHtml
                             allowHTML: <?= Js::from($badgeTooltip instanceof Htmlable) ?>,
                         }"
                     <?php } ?>
-                    <?= (new ComponentAttributeBag)->color(BadgeComponent::class, $badgeColor)->class(['fi-badge'])->toHtml() ?>
+                    <?= (new FilamentComponentAttributeBag)->color(BadgeComponent::class, $badgeColor)->class(['fi-badge'])->toHtml() ?>
                 >
                     <?= e($badge) ?>
                 </span>

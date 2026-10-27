@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use LogicException;
 
+use function Filament\Support\apply_search_constraint;
 use function Filament\Support\generate_search_column_expression;
+use function Filament\Support\generate_search_pattern;
 use function Filament\Support\generate_search_term_expression;
 use function Filament\Support\get_model_label;
 
@@ -83,15 +85,17 @@ class Type
             $isFirst = true;
 
             $search = generate_search_term_expression($search, $isForcedCaseInsensitive, $databaseConnection);
+            $searchPattern = generate_search_pattern($search, hasLeadingWildcard: true, hasTrailingWildcard: true);
 
-            $query->where(function (Builder $query) use ($isFirst, $isForcedCaseInsensitive, $databaseConnection, $search): Builder {
+            $query->where(function (Builder $query) use ($isFirst, $isForcedCaseInsensitive, $databaseConnection, $searchPattern): Builder {
                 foreach ($this->getSearchColumns() as $searchColumn) {
                     $whereClause = $isFirst ? 'where' : 'orWhere';
 
-                    $query->{$whereClause}(
+                    apply_search_constraint(
+                        $query,
                         generate_search_column_expression($searchColumn, $isForcedCaseInsensitive, $databaseConnection),
-                        'like',
-                        "%{$search}%",
+                        $searchPattern,
+                        ($whereClause === 'where') ? 'and' : 'or',
                     );
 
                     $isFirst = false;
@@ -109,6 +113,7 @@ class Type
             }
 
             $keyName = $query->getModel()->getKeyName();
+            $qualifiedKeyName = $query->getModel()->getQualifiedKeyName();
 
             if ($this->hasOptionLabelFromRecordUsingCallback()) {
                 return $query
@@ -121,12 +126,18 @@ class Type
 
             $titleAttribute = $this->getTitleAttribute();
 
+            // Qualify the column names so they are not ambiguous when the query has been
+            // modified to include a join (for example, through `modifyOptionsQueryUsing()`).
+            $qualifiedTitleAttribute = str_contains($titleAttribute, '->')
+                ? $titleAttribute
+                : $query->qualifyColumn($titleAttribute);
+
             if (empty($query->getQuery()->orders)) {
-                $query->orderBy($titleAttribute);
+                $query->orderBy($qualifiedTitleAttribute);
             }
 
             return $query
-                ->pluck($titleAttribute, $keyName)
+                ->pluck($qualifiedTitleAttribute, $qualifiedKeyName)
                 ->toArray();
         });
 
@@ -152,6 +163,7 @@ class Type
             }
 
             $keyName = $query->getModel()->getKeyName();
+            $qualifiedKeyName = $query->getModel()->getQualifiedKeyName();
 
             if ($this->hasOptionLabelFromRecordUsingCallback()) {
                 return $query
@@ -164,19 +176,27 @@ class Type
 
             $titleAttribute = $this->getTitleAttribute();
 
+            // Qualify the column names so they are not ambiguous when the query has been
+            // modified to include a join (for example, through `modifyOptionsQueryUsing()`).
+            $qualifiedTitleAttribute = str_contains($titleAttribute, '->')
+                ? $titleAttribute
+                : $query->qualifyColumn($titleAttribute);
+
             if (empty($query->getQuery()->orders)) {
-                $query->orderBy($titleAttribute);
+                $query->orderBy($qualifiedTitleAttribute);
             }
 
             return $query
-                ->pluck($titleAttribute, $keyName)
+                ->pluck($qualifiedTitleAttribute, $qualifiedKeyName)
                 ->toArray();
         });
 
         $this->getOptionLabelUsing(function (Select $component, $value) {
             $query = $this->getModel()::query();
 
-            $query->where($query->getModel()->getKeyName(), $value);
+            // Qualify the key name so it is not ambiguous when the query has been modified to
+            // include a join (for example, through `modifyOptionsQueryUsing()`).
+            $query->where($query->getModel()->getQualifiedKeyName(), $value);
 
             if ($this->modifyOptionsQueryUsing) {
                 $query = $component->evaluate($this->modifyOptionsQueryUsing, [

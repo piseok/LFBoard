@@ -2,9 +2,9 @@
 
 namespace Filament\Actions\Exports\Jobs;
 
+use AnourValar\EloquentSerialize\Facades\EloquentSerializeFacade;
 use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
-use Filament\Support\EloquentSerializer\EloquentSerializer;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -17,6 +17,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use League\Csv\Bom;
 use League\Csv\Writer;
+use League\Flysystem\UnableToWriteFile;
 use SplTempFileObject;
 
 class PrepareCsvExport implements ShouldQueue
@@ -66,9 +67,12 @@ class PrepareCsvExport implements ShouldQueue
         $csv->insertOne(array_values($this->columnMap));
 
         $filePath = $this->export->getFileDirectory() . DIRECTORY_SEPARATOR . 'headers.csv';
-        $this->export->getFileDisk()->put($filePath, $csv->toString(), Filesystem::VISIBILITY_PRIVATE);
 
-        $query = app(EloquentSerializer::class)->unserialize($this->query);
+        if (! $this->export->getFileDisk()->put($filePath, $csv->toString(), Filesystem::VISIBILITY_PRIVATE)) {
+            throw UnableToWriteFile::atLocation($filePath);
+        }
+
+        $query = EloquentSerializeFacade::unserialize($this->query);
         $keyName = $query->getModel()->getKeyName();
         $qualifiedKeyName = $query->getModel()->getQualifiedKeyName();
 

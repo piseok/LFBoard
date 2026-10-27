@@ -12,8 +12,12 @@ export default function colorPickerFormComponent({
     liveDebounce,
     state,
 }) {
+    let isDestroyed = false
+
     return {
         state,
+
+        panelObserver: null,
 
         init() {
             if (!(this.state === null || this.state === '')) {
@@ -27,6 +31,10 @@ export default function colorPickerFormComponent({
             this.$watch(
                 'state',
                 Alpine.debounce((value) => {
+                    if (isDestroyed) {
+                        return
+                    }
+
                     if (!CSS.supports('color', value)) {
                         return
                     }
@@ -48,6 +56,10 @@ export default function colorPickerFormComponent({
 
                 setTimeout(
                     () => {
+                        if (isDestroyed) {
+                            return
+                        }
+
                         if (this.state !== event.detail.value) {
                             return
                         }
@@ -59,9 +71,11 @@ export default function colorPickerFormComponent({
             })
 
             if (isLive || isLiveDebounced || isLiveOnBlur) {
-                new MutationObserver(() =>
+                this.panelObserver = new MutationObserver(() =>
                     this.isOpen() ? null : this.commitState(),
-                ).observe(this.$refs.panel, {
+                )
+
+                this.panelObserver.observe(this.$refs.panel, {
                     attributes: true,
                     childList: true,
                 })
@@ -87,7 +101,35 @@ export default function colorPickerFormComponent({
             return this.$refs.panel.style.display === 'block'
         },
 
+        closePanelAndRestoreFocus() {
+            this.$refs.panel.close()
+
+            if (document.activeElement === this.$refs.input) {
+                return
+            }
+
+            const preventPanelOpening = (event) => {
+                event.stopImmediatePropagation()
+            }
+
+            this.$refs.input.addEventListener(
+                'focus',
+                preventPanelOpening,
+                true,
+            )
+            this.$refs.input.focus()
+            this.$refs.input.removeEventListener(
+                'focus',
+                preventPanelOpening,
+                true,
+            )
+        },
+
         commitState() {
+            if (isDestroyed) {
+                return
+            }
+
             if (
                 JSON.stringify(this.$wire.__instance.canonical) ===
                 JSON.stringify(this.$wire.__instance.ephemeral)
@@ -96,6 +138,12 @@ export default function colorPickerFormComponent({
             }
 
             this.$wire.$commit()
+        },
+
+        destroy() {
+            isDestroyed = true
+            this.panelObserver?.disconnect()
+            this.$refs.panel?.close?.()
         },
     }
 }

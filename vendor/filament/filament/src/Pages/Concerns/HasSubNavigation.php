@@ -8,6 +8,7 @@ use Filament\Navigation\NavigationItem;
 use Filament\Pages\Enums\SubNavigationPosition;
 use Filament\Pages\Page;
 use Filament\Resources\Pages\Page as ResourcePage;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Collection;
 use UnitEnum;
 
@@ -60,7 +61,8 @@ trait HasSubNavigation
 
         foreach ($this->getSubNavigation() as $item) {
             if ($item instanceof NavigationGroup) {
-                $navigationGroups[$item->getLabel()] = $item;
+                $label = $item->getLabel();
+                $navigationGroups[($label instanceof Htmlable) ? $label->toHtml() : $label] = $item;
 
                 continue;
             }
@@ -134,18 +136,26 @@ trait HasSubNavigation
     {
         $parentItems = $items->groupBy(fn (NavigationItem $item): string => $item->getParentItem() ?? '');
 
-        $items = $parentItems->get('', collect())
-            ->keyBy(fn (NavigationItem $item): string => $item->getLabel());
+        $items = $parentItems->get('', collect());
 
-        $parentItems->except([''])->each(function (Collection $childItems, string $parentItemLabel) use ($items): void {
-            if (! $items->has($parentItemLabel)) {
+        $parentItems->except([''])->each(function (Collection $parentItemItems, string $parentItemKey) use ($items): void {
+            $parent = $items->first(
+                fn (NavigationItem $item): bool => $item->getKey() === $parentItemKey || (($label = $item->getLabel()) instanceof Htmlable ? $label->toHtml() : $label) === $parentItemKey
+            );
+
+            if (! $parent) {
                 return;
             }
 
-            $items->get($parentItemLabel)->childItems($childItems);
+            $mergedChildren = collect($parent->getChildItems())
+                ->merge($parentItemItems)
+                ->sortBy(fn (NavigationItem $item): int => $item->getSort())
+                ->values();
+
+            $parent->childItems($mergedChildren);
         });
 
-        return $items->values();
+        return $items;
     }
 
     /**

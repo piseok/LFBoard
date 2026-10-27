@@ -1,7 +1,3 @@
-@php
-    use Filament\Support\Enums\VerticalAlignment;
-@endphp
-
 @props([
     'areHtmlErrorMessagesAllowed' => null,
     'errorMessage' => null,
@@ -11,7 +7,7 @@
     'hasInlineLabel' => null,
     'hasNestedRecursiveValidationRules' => null,
     'id' => null,
-    'inlineLabelVerticalAlignment' => VerticalAlignment::Start,
+    'inlineLabelVerticalAlignment' => null,
     'isDisabled' => null,
     'label' => null,
     'labelPrefix' => null,
@@ -24,11 +20,17 @@
 ])
 
 @php
+    use Filament\Forms\Components\Contracts\HasNestedRecursiveValidationRules;
+    use Filament\Forms\Components\Field;
+    use Filament\Support\Enums\VerticalAlignment;
     use Illuminate\Support\Arr;
+    use Illuminate\View\ComponentSlot;
+
+    $inlineLabelVerticalAlignment ??= VerticalAlignment::Start;
 
     if ($field) {
         $hasInlineLabel ??= $field->hasInlineLabel();
-        $hasNestedRecursiveValidationRules ??= $field instanceof \Filament\Forms\Components\Contracts\HasNestedRecursiveValidationRules;
+        $hasNestedRecursiveValidationRules ??= $field instanceof HasNestedRecursiveValidationRules;
         $id ??= $field->getId();
         $isDisabled ??= $field->isDisabled();
         $label ??= $field->getLabel();
@@ -54,7 +56,7 @@
 
     if ($hasError && filled($statePath) && blank($errorMessage) && blank($errorMessages)) {
         if ($shouldShowAllValidationMessages) {
-            $errorMessages = $errors->has($statePath) ? $errors->get($statePath) : ($hasNestedRecursiveValidationRules ? $errors->get("{$statePath}.*") : []);
+            $errorMessages = $errors->has($statePath) ? $errors->get($statePath) : ($hasNestedRecursiveValidationRules ? Arr::flatten($errors->get("{$statePath}.*")) : []);
 
             if (count($errorMessages) === 1) {
                 $errorMessage = Arr::first($errorMessages);
@@ -77,11 +79,17 @@
             ])
     }}
 >
+    @if (($field instanceof Field) && filled($requiredDescription = $field->getRequiredDescription()))
+        <span id="{{ $id }}-required" class="fi-sr-only">
+            {{ $requiredDescription }}
+        </span>
+    @endif
+
     @if (filled($label) && $labelSrOnly)
         <{{ $labelTag }}
             @if ($labelTag === 'label')
                 for="{{ $id }}"
-            @else
+            @elseif (filled($id))
                 id="{{ $id }}-label"
             @endif
             class="fi-fo-field-label fi-sr-only"
@@ -102,7 +110,7 @@
             <div
                 @class([
                     'fi-fo-field-label-ctn',
-                    ($label instanceof \Illuminate\View\ComponentSlot) ? $label->attributes->get('class') : null,
+                    ($label instanceof ComponentSlot) ? $label->attributes->get('class') : null,
                 ])
             >
                 {{ $beforeLabelSchema }}
@@ -111,7 +119,7 @@
                     <{{ $labelTag }}
                         @if ($labelTag === 'label')
                             for="{{ $id }}"
-                        @else
+                        @elseif (filled($id))
                             id="{{ $id }}-label"
                         @endif
                         class="fi-fo-field-label"
@@ -161,6 +169,9 @@
 
                 @if (filled($errorMessages))
                     <ul
+                        @if (filled($id))
+                            id="{{ $id }}-error"
+                        @endif
                         data-validation-error
                         class="fi-fo-field-wrp-error-list"
                     >
@@ -176,6 +187,9 @@
                     </ul>
                 @elseif ($areHtmlErrorMessagesAllowed)
                     <div
+                        @if (filled($id))
+                            id="{{ $id }}-error"
+                        @endif
                         data-validation-error
                         class="fi-fo-field-wrp-error-message"
                     >
@@ -183,6 +197,9 @@
                     </div>
                 @else
                     <p
+                        @if (filled($id))
+                            id="{{ $id }}-error"
+                        @endif
                         data-validation-error
                         class="fi-fo-field-wrp-error-message"
                     >

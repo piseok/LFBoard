@@ -3,6 +3,7 @@
 namespace Filament\Forms\Components\Concerns;
 
 use Closure;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\View\ComponentAttributeBag;
 
 trait HasExtraFieldWrapperAttributes
@@ -21,6 +22,10 @@ trait HasExtraFieldWrapperAttributes
         // pass unsanitized user input as attribute names or values.
 
         if ($merge) {
+            if (($attributes instanceof Closure) && in_array($attributes, $this->extraFieldWrapperAttributes, strict: true)) {
+                return $this;
+            }
+
             $this->extraFieldWrapperAttributes[] = $attributes;
         } else {
             $this->extraFieldWrapperAttributes = [$attributes];
@@ -34,7 +39,7 @@ trait HasExtraFieldWrapperAttributes
      */
     public function getExtraFieldWrapperAttributes(): array
     {
-        $temporaryAttributeBag = new ComponentAttributeBag;
+        $temporaryAttributeBag = new FilamentComponentAttributeBag;
 
         foreach ($this->extraFieldWrapperAttributes as $extraFieldWrapperAttributes) {
             $temporaryAttributeBag = $temporaryAttributeBag->merge($this->evaluate($extraFieldWrapperAttributes), escape: false);
@@ -45,6 +50,6 @@ trait HasExtraFieldWrapperAttributes
 
     public function getExtraFieldWrapperAttributesBag(): ComponentAttributeBag
     {
-        return new ComponentAttributeBag($this->getExtraFieldWrapperAttributes());
+        return new FilamentComponentAttributeBag($this->getExtraFieldWrapperAttributes());
     }
 }

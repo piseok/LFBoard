@@ -1,8 +1,3 @@
-@php
-    use Filament\Tables\Enums\ColumnManagerResetActionPosition;
-    use Illuminate\View\ComponentAttributeBag;
-@endphp
-
 @props([
     'applyAction',
     'columns' => null,
@@ -10,8 +5,15 @@
     'hasToggleableColumns',
     'headingTag' => 'h3',
     'reorderAnimationDuration' => 300,
-    'resetActionPosition' => ColumnManagerResetActionPosition::Header,
+    'resetActionPosition' => null,
 ])
+
+@php
+    use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
+    use Filament\Tables\Enums\ColumnManagerResetActionPosition;
+
+    $resetActionPosition ??= ColumnManagerResetActionPosition::Header;
+@endphp
 
 <div
     x-data="filamentTableColumnManager({
@@ -30,7 +32,7 @@
                 <x-filament::link
                     :attributes="
                         \Filament\Support\prepare_inherited_attributes(
-                            new ComponentAttributeBag([
+                            new FilamentComponentAttributeBag([
                                 'color' => 'danger',
                                 'tag' => 'button',
                                 'wire:click' => 'resetTableColumnManager',

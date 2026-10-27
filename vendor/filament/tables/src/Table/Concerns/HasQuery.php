@@ -28,6 +28,7 @@ trait HasQuery
     public function query(Builder | Closure | null $query): static
     {
         $this->query = $query;
+        $this->hasCachedModel = false;
 
         return $this;
     }
@@ -42,6 +43,8 @@ trait HasQuery
     public function relationship(?Closure $relationship): static
     {
         $this->getRelationshipUsing = $relationship;
+        $this->hasCachedModel = false;
+        $this->cachedHasPivotRecordKeys = null;
 
         return $this;
     }
@@ -102,9 +105,18 @@ trait HasQuery
             }
 
             // https://github.com/filamentphp/filament/issues/2079
-            $query->withCasts(
-                app($relationship->getPivotClass())->getCasts(),
-            );
+            $pivot = app($relationship->getPivotClass());
+            $pivotCasts = $pivot->getCasts();
+
+            if ($this->allowsDuplicates()) {
+                if (array_key_exists($pivot->getKeyName(), $pivotCasts)) {
+                    $pivotCasts['filament_pivot_key'] = $pivotCasts[$pivot->getKeyName()];
+                }
+
+                unset($pivotCasts[$query->getModel()->getKeyName()]);
+            }
+
+            $query->withCasts($pivotCasts);
         }
 
         return $query;

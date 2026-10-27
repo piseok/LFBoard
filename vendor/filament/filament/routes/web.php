@@ -79,7 +79,7 @@ Route::name('filament.')
                                             Route::get($panel->getEmailVerificationPromptRouteSlug(), $panel->getEmailVerificationPromptRouteAction())
                                                 ->name('prompt');
                                             Route::get($panel->getEmailVerificationRouteSlug('/{id}/{hash}'), EmailVerificationController::class)
-                                                ->middleware(['signed', 'throttle:6,1'])
+                                                ->middleware(['signed', 'throttle:filament:auth'])
                                                 ->name('verify');
                                         });
                                 }
@@ -89,11 +89,11 @@ Route::name('filament.')
                                         ->prefix($panel->getEmailChangeVerificationRoutePrefix())
                                         ->group(function () use ($panel): void {
                                             Route::get($panel->getEmailChangeVerificationRouteSlug('/{id}/{email}'), EmailChangeVerificationController::class)
-                                                ->middleware(['signed', 'throttle:6,1'])
+                                                ->middleware(['signed', 'throttle:filament:auth'])
                                                 ->name('verify');
 
                                             Route::get($panel->getEmailChangeVerificationRouteSlug('/{id}/{email}/block'), BlockEmailChangeVerificationController::class)
-                                                ->middleware(['signed', 'throttle:6,1'])
+                                                ->middleware(['signed', 'throttle:filament:auth'])
                                                 ->name('block-verification');
                                         });
                                 }
@@ -187,7 +187,7 @@ Route::name('filament.')
 
                                         if (version_compare(Application::VERSION, '13.0.0', '>=')) { /** @phpstan-ignore if.alwaysTrue, if.alwaysFalse */
                                             $groupStack = Route::getGroupStack();
-                                            $rootDomain = RouteUri::parse(end($groupStack)['domain'] ?? '')->uri;
+                                            $rootDomain = RouteUri::parse(str_replace(['http://', 'https://'], '', end($groupStack)['domain'] ?? ''))->uri;
                                             $rootUri = RouteUri::parse(trim(Route::getLastGroupPrefix(), '/') ?: '/')->uri;
                                             $rootKey = $rootDomain . $rootUri;
 

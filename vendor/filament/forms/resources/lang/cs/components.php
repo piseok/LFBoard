@@ -104,6 +104,14 @@ return [
 
         ],
 
+        'block_picker' => [
+
+            'no_search_results_message' => 'Žádné bloky neodpovídají vašemu hledání.',
+
+            'search_prompt' => 'Hledat bloky',
+
+        ],
+
     ],
 
     'checkbox_list' => [
@@ -122,9 +130,53 @@ return [
 
     ],
 
+    'color_picker' => [
+
+        'panel_label' => 'Výběr barvy',
+
+    ],
+
+    'date_time_picker' => [
+
+        'month_select' => [
+            'label' => 'Měsíc',
+        ],
+
+        'year_input' => [
+            'label' => 'Rok',
+        ],
+
+        'hour_input' => [
+            'label' => 'Hodina',
+        ],
+
+        'minute_input' => [
+            'label' => 'Minuta',
+        ],
+
+        'second_input' => [
+            'label' => 'Sekunda',
+        ],
+
+    ],
+
     'file_upload' => [
 
+        'actions' => [
+
+            'download' => [
+                'label' => 'Stáhnout',
+            ],
+
+            'open' => [
+                'label' => 'Otevřít v nové záložce',
+            ],
+
+        ],
+
         'editor' => [
+
+            'label' => 'Editor obrázků',
 
             'actions' => [
 
@@ -268,6 +320,18 @@ return [
 
         ],
 
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Akce',
+            ],
+
+            'reorder' => [
+                'label' => 'Přesunout',
+            ],
+
+        ],
+
         'fields' => [
 
             'key' => [
@@ -286,7 +350,7 @@ return [
 
         'file_attachments_accepted_file_types_message' => 'Nahrané soubory musí být typu: :values.',
 
-        'file_attachments_max_size_message' => 'Nahrané soubory nesmí být větší než :max kilobajtů.',
+        'file_attachments_max_size_message' => 'Nahrané soubory nesmí být větší než :max kB.',
 
         'tools' => [
             'attach_files' => 'Přidat soubory',
@@ -338,6 +402,18 @@ return [
     ],
 
     'repeater' => [
+
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Akce',
+            ],
+
+            'reorder' => [
+                'label' => 'Přesunout',
+            ],
+
+        ],
 
         'actions' => [
 
@@ -427,6 +503,10 @@ return [
 
             ],
 
+            'close_panel' => [
+                'label' => 'Zavřít panel',
+            ],
+
             'custom_block' => [
 
                 'modal' => [
@@ -464,14 +544,14 @@ return [
                             'placeholder' => 'Žádné',
 
                             'options' => [
-                                'two' => 'Dvě',
+                                'two' => 'Dva',
                                 'three' => 'Tři',
                                 'four' => 'Čtyři',
                                 'five' => 'Pět',
-                                'two_start_third' => 'Dvě (Začátek třetí)',
-                                'two_end_third' => 'Dvě (Konec třetí)',
-                                'two_start_fourth' => 'Dvě (Začátek čtvrté)',
-                                'two_end_fourth' => 'Dvě (Konec čtvrté)',
+                                'two_start_third' => 'Dva (první zabírá třetinu)',
+                                'two_end_third' => 'Dva (druhý zabírá třetinu)',
+                                'two_start_fourth' => 'Dva (první zabírá čtvrtinu)',
+                                'two_end_fourth' => 'Dva (druhý zabírá čtvrtinu)',
                             ],
                         ],
 
@@ -591,17 +671,43 @@ return [
 
         ],
 
+        'custom_blocks' => [
+
+            'actions' => [
+
+                'delete' => [
+                    'label' => 'Smazat blok',
+                ],
+
+                'edit' => [
+                    'label' => 'Upravit blok',
+                ],
+
+            ],
+
+            'no_search_results_message' => 'Žádné bloky neodpovídají vašemu hledání.',
+
+            'search_label' => 'Hledat bloky',
+
+            'search_prompt' => 'Hledat bloky',
+
+        ],
+
         'file_attachments_accepted_file_types_message' => 'Nahrané soubory musí být typu: :values.',
 
-        'file_attachments_max_size_message' => 'Nahrané soubory nesmí být větší než :max kilobajtů.',
+        'file_attachments_max_size_message' => 'Nahrané soubory nesmí být větší než :max kB.',
 
         'no_merge_tag_search_results_message' => 'Žádné výsledky pro značky slučování.',
 
         'mentions' => [
             'no_options_message' => 'Nejsou dostupné žádné možnosti.',
             'no_search_results_message' => 'Žádné výsledky neodpovídají vašemu hledání.',
-            'search_prompt' => 'Začněte psát na vyhledávání...',
+            'search_prompt' => 'Zadejte hledaný výraz...',
             'searching_message' => 'Hledám...',
+        ],
+
+        'toolbar' => [
+            'label' => 'Panel nástrojů',
         ],
 
         'tools' => [
@@ -664,6 +770,10 @@ return [
 
         'actions' => [
 
+            'clear' => [
+                'label' => 'Vymazat výběr',
+            ],
+
             'create_option' => [
 
                 'label' => 'Vytvořit',
@@ -708,6 +818,10 @@ return [
 
             ],
 
+            'remove_option' => [
+                'label' => 'Odebrat :label',
+            ],
+
         ],
 
         'boolean' => [
@@ -717,7 +831,7 @@ return [
 
         'loading_message' => 'Načítání...',
 
-        'max_items_message' => 'Lze vybrat pouze 1 položka.|Lze vybrat pouze :count položky.|Lze vybrat pouze :count položek.',
+        'max_items_message' => 'Lze vybrat pouze 1 položku.|Lze vybrat pouze :count položky.|Lze vybrat pouze :count položek.',
 
         'no_options_message' => 'Nejsou dostupné žádné možnosti.',
 
@@ -726,6 +840,8 @@ return [
         'placeholder' => 'Zvolte některou z možností',
 
         'searching_message' => 'Hledání...',
+
+        'search_label' => 'Hledat',
 
         'search_prompt' => 'Zadejte hledaný výraz...',
 
@@ -742,6 +858,10 @@ return [
         ],
 
         'placeholder' => 'Nový štítek',
+
+        'tag_added' => 'Přidáno: :tag',
+
+        'tag_removed' => 'Odstraněno: :tag',
 
     ],
 

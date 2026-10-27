@@ -68,6 +68,7 @@ trait HasNavigation
 
         return [
             NavigationItem::make(static::getNavigationLabel())
+                ->key(static::class)
                 ->group(static::getNavigationGroup())
                 ->parentItem(static::getNavigationParentItem())
                 ->icon(static::getNavigationIcon())
@@ -136,7 +137,7 @@ trait HasNavigation
         return static::$activeNavigationIcon ?? static::getNavigationIcon();
     }
 
-    public static function getNavigationLabel(): string
+    public static function getNavigationLabel(): string | Htmlable
     {
         return static::$navigationLabel ?? static::getTitleCasePluralModelLabel();
     }

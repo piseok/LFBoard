@@ -6,29 +6,34 @@ use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\View\FormsIconAlias;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Concerns\CanBeCollapsed;
 use Filament\Schemas\Components\Concerns\CanBeCompact;
 use Filament\Schemas\Components\Concerns\HasContainerGridLayout;
-use Filament\Schemas\Components\Contracts\CanConcealComponents;
 use Filament\Schemas\Components\Contracts\HasExtraItemActions;
 use Filament\Schemas\Schema;
+use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\HasReorderAnimationDuration;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\Size;
+use Filament\Support\Enums\VerticalAlignment;
+use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentIcon;
 use Filament\Support\Icons\Heroicon;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
+use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 use LogicException;
 
 use function Filament\Forms\array_move_after;
 use function Filament\Forms\array_move_before;
 
-class Repeater extends Field implements CanConcealComponents, HasExtraItemActions
+class Repeater extends Field implements HasEmbeddedView, HasExtraItemActions
 {
     use CanBeCollapsed;
     use CanBeCompact;
@@ -54,6 +59,11 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
     protected bool | Closure $isReorderableWithButtons = false;
 
     protected ?Collection $cachedExistingRecords = null;
+
+    /**
+     * @var array<bool> | null
+     */
+    protected ?array $cachedItemsRawStateStructure = null;
 
     protected string | Closure | null $orderColumn = null;
 
@@ -279,21 +289,27 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
             ->label(fn (Repeater $component) => $component->getAddBetweenActionLabel())
             ->color('gray')
             ->action(function (array $arguments, Repeater $component): void {
+                $state = $component->getRawState() ?? [];
+
+                if (! array_key_exists($arguments['afterItem'], $state)) {
+                    return;
+                }
+
                 $newKey = $component->generateUuid();
+
+                if (! $newKey) {
+                    $state[] = [];
+                    $newKey = array_key_last($state);
+                    unset($state[$newKey]);
+                }
 
                 $items = [];
 
-                foreach ($component->getRawState() ?? [] as $key => $item) {
+                foreach ($state as $key => $item) {
                     $items[$key] = $item;
 
-                    if ($key === $arguments['afterItem']) {
-                        if ($newKey) {
-                            $items[$newKey] = [];
-                        } else {
-                            $items[] = [];
-
-                            $newKey = array_key_last($items);
-                        }
+                    if ((string) $key === (string) $arguments['afterItem']) {
+                        $items[$newKey] = [];
                     }
                 }
 
@@ -351,9 +367,13 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
             ->icon(FilamentIcon::resolve(FormsIconAlias::COMPONENTS_REPEATER_ACTIONS_CLONE) ?? Heroicon::Square2Stack)
             ->color('gray')
             ->action(function (array $arguments, Repeater $component): void {
-                $newUuid = $component->generateUuid();
+                $items = $component->getRawState() ?? [];
 
-                $items = $component->getRawState();
+                if (! array_key_exists($arguments['item'], $items)) {
+                    return;
+                }
+
+                $newUuid = $component->generateUuid();
 
                 if ($newUuid) {
                     $items[$newUuid] = $items[$arguments['item']];
@@ -401,7 +421,12 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
             ->icon(FilamentIcon::resolve(FormsIconAlias::COMPONENTS_REPEATER_ACTIONS_DELETE) ?? Heroicon::Trash)
             ->color('danger')
             ->action(function (array $arguments, Repeater $component): void {
-                $items = $component->getRawState();
+                $items = $component->getRawState() ?? [];
+
+                if (! array_key_exists($arguments['item'], $items)) {
+                    return;
+                }
+
                 unset($items[$arguments['item']]);
 
                 $component->rawState($items);
@@ -442,7 +467,13 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
             ->icon(FilamentIcon::resolve(FormsIconAlias::COMPONENTS_REPEATER_ACTIONS_MOVE_DOWN) ?? Heroicon::ArrowDown)
             ->color('gray')
             ->action(function (array $arguments, Repeater $component): void {
-                $items = array_move_after($component->getRawState(), $arguments['item']);
+                $items = $component->getRawState() ?? [];
+
+                if (! array_key_exists($arguments['item'], $items)) {
+                    return;
+                }
+
+                $items = array_move_after($items, $arguments['item']);
 
                 $component->rawState($items);
 
@@ -482,7 +513,13 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
             ->icon(FilamentIcon::resolve(FormsIconAlias::COMPONENTS_REPEATER_ACTIONS_MOVE_UP) ?? Heroicon::ArrowUp)
             ->color('gray')
             ->action(function (array $arguments, Repeater $component): void {
-                $items = array_move_before($component->getRawState(), $arguments['item']);
+                $items = $component->getRawState() ?? [];
+
+                if (! array_key_exists($arguments['item'], $items)) {
+                    return;
+                }
+
+                $items = array_move_before($items, $arguments['item']);
 
                 $component->rawState($items);
 
@@ -522,10 +559,14 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
             ->icon(FilamentIcon::resolve(FormsIconAlias::COMPONENTS_REPEATER_ACTIONS_REORDER) ?? Heroicon::ArrowsUpDown)
             ->color('gray')
             ->action(function (array $arguments, Repeater $component): void {
-                $items = [
-                    ...array_flip($arguments['items']),
-                    ...$component->getRawState(),
-                ];
+                $items = $component->getRawState() ?? [];
+                $order = array_flip($arguments['items']);
+
+                if (array_diff_key($order, $items)) {
+                    return;
+                }
+
+                $items = array_replace($order, $items);
 
                 $component->rawState($items);
 
@@ -838,13 +879,25 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
      */
     public function getItems(): array
     {
+        return $this->getCachedDefaultChildSchemas();
+    }
+
+    /**
+     * @return array<Schema>
+     */
+    public function getDefaultChildSchemas(): array
+    {
+        $rawState = ($this->getRawState() ?? []);
+
+        $this->cachedItemsRawStateStructure = array_map(is_array(...), $rawState);
+
         $relationship = $this->getRelationship();
 
         $records = $relationship ? $this->getCachedExistingRecords() : null;
 
         $items = [];
 
-        foreach ($this->getRawState() ?? [] as $itemKey => $itemData) {
+        foreach ($rawState as $itemKey => $itemData) {
             $items[$itemKey] = $this
                 ->getChildSchema()
                 ->statePath($itemKey)
@@ -858,11 +911,27 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
     }
 
     /**
-     * @return array<Schema>
+     * Item schemas only depend on the raw state's structure - the item keys, their
+     * order, and whether each item holds an array - since fields inside the items
+     * read their values from the live raw state. Comparing a structural fingerprint
+     * instead of the item values keeps this check cheap when it runs often, and
+     * avoids rebuilding the item schemas every time a value inside an item changes.
+     * The existing records that relationship items embed are not observable through
+     * the raw state, so `clearCachedExistingRecords()` clears the items explicitly.
      */
-    public function getDefaultChildSchemas(): array
+    protected function areCachedDefaultChildSchemasFresh(): bool
     {
-        return $this->getItems();
+        return $this->cachedItemsRawStateStructure === array_map(is_array(...), $this->getRawState() ?? []);
+    }
+
+    protected function isCachedDefaultChildSchemaFresh(string | int $key): bool
+    {
+        $rawState = $this->getRawState();
+
+        return is_array($rawState)
+            && array_key_exists($key, $rawState)
+            && array_key_exists($key, $this->cachedItemsRawStateStructure ?? [])
+            && ($this->cachedItemsRawStateStructure[$key] === is_array($rawState[$key]));
     }
 
     public function getAddActionLabel(): string
@@ -1205,11 +1274,16 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
 
         $relationshipQuery = $relationship->getQuery();
 
+        // Explicitly select the related table's columns so the query is not ambiguous if it is
+        // later modified to include a join (for example, through `modifyRelationshipQueryUsing()`).
+        // Without this, `select *` across a join can hydrate the key from the wrong table.
         if ($relationship instanceof BelongsToMany) {
             $relationshipQuery->select([
                 $relationship->getTable() . '.*',
                 $relationshipQuery->getModel()->getTable() . '.*',
             ]);
+        } else {
+            $relationshipQuery->select($relationshipQuery->getModel()->getTable() . '.*');
         }
 
         if ($this->modifyRelationshipQueryUsing) {
@@ -1219,7 +1293,8 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
         }
 
         if (filled($orderColumn)) {
-            $relationshipQuery->orderBy($orderColumn);
+            // Qualify the order column so it is not ambiguous when the query includes a join.
+            $relationshipQuery->orderBy($relationshipQuery->qualifyColumn($orderColumn));
         }
 
         return $this->cachedExistingRecords = $this->modifyRelationshipRecords($relationshipQuery->get()->mapWithKeys(
@@ -1229,14 +1304,17 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
 
     public function getItemLabel(string $key, ?int $index = null): string | Htmlable | null
     {
-        $container = $this->getChildSchema($key);
+        $container = null;
+        $getContainer = function () use ($key, &$container): ?Schema {
+            return $container ??= $this->getChildSchema($key);
+        };
 
         return $this->evaluate($this->itemLabel, [
-            'container' => $container,
-            'item' => $container,
+            'container' => $getContainer,
+            'item' => $getContainer,
             'key' => $key,
-            'schema' => $container,
-            'state' => $container->getStateSnapshot(),
+            'schema' => $getContainer,
+            'state' => static fn (): array => $getContainer()->getStateSnapshot(),
             'uuid' => $key,
             'index' => $index,
         ]);
@@ -1301,6 +1379,10 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
     public function clearCachedExistingRecords(): void
     {
         $this->cachedExistingRecords = null;
+
+        // Items embed the existing records, which the raw state snapshot cannot
+        // observe, so they must be cleared explicitly alongside the records.
+        $this->clearCachedChildSchemas();
     }
 
     /**
@@ -1467,15 +1549,7 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
         }
     }
 
-    public function canConcealComponents(): bool
-    {
-        return $this->isCollapsible();
-    }
-
-    /**
-     * @return view-string
-     */
-    public function getDefaultView(): string
+    public function getPublishedViewOverrideCheckPath(): ?string
     {
         if ($this->isTable()) {
             return 'filament-forms::components.repeater.table';
@@ -1486,6 +1560,628 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
         }
 
         return 'filament-forms::components.repeater.index';
+    }
+
+    public function toEmbeddedHtml(): string
+    {
+        if ($this->isTable()) {
+            return $this->toTableEmbeddedHtml();
+        }
+
+        if ($this->isSimple()) {
+            return $this->toSimpleEmbeddedHtml();
+        }
+
+        $items = $this->getItems();
+
+        $addAction = $this->getAction($this->getAddActionName());
+        $addActionAlignment = $this->getAddActionAlignment();
+        $addBetweenAction = $this->getAction($this->getAddBetweenActionName());
+        $cloneAction = $this->getAction($this->getCloneActionName());
+        $collapseAllAction = $this->getAction($this->getCollapseAllActionName());
+        $expandAllAction = $this->getAction($this->getExpandAllActionName());
+        $deleteAction = $this->getAction($this->getDeleteActionName());
+        $moveDownAction = $this->getAction($this->getMoveDownActionName());
+        $moveUpAction = $this->getAction($this->getMoveUpActionName());
+        $reorderAction = $this->getAction($this->getReorderActionName());
+        $extraItemActions = $this->getExtraItemActions();
+
+        $hasItemNumbers = $this->hasItemNumbers();
+        $hasItemHeaders = $this->hasItemHeaders();
+        $isAddable = $this->isAddable();
+        $isCloneable = $this->isCloneable();
+        $isCollapsible = $this->isCollapsible();
+        $isDeletable = $this->isDeletable();
+        $isReorderableWithButtons = $this->isReorderableWithButtons();
+        $isReorderableWithDragAndDrop = $this->isReorderableWithDragAndDrop();
+
+        $collapseAllActionIsVisible = $isCollapsible && $collapseAllAction->isVisible();
+        $expandAllActionIsVisible = $isCollapsible && $expandAllAction->isVisible();
+        $persistCollapsed = $this->shouldPersistCollapsed();
+
+        $key = $this->getKey();
+
+        $itemLabelHeadingTag = $this->getHeadingTag();
+        $isItemLabelTruncated = $this->isItemLabelTruncated();
+        $labelBetweenItems = $this->getLabelBetweenItems();
+
+        $id = $this->getId();
+
+        $outerAttributes = (new FilamentComponentAttributeBag)
+            ->merge($this->getExtraAttributes(), escape: false)
+            ->merge($this->getAlpineAttributes($items), escape: false)
+            ->merge([
+                'aria-describedby' => $this->getAccessibilityAttributes()['aria-describedby'] ?? null,
+                'aria-labelledby' => "{$id}-label",
+                'id' => $id,
+                'role' => 'group',
+            ], escape: false)
+            ->class([
+                'fi-fo-repeater',
+                'fi-collapsible' => $isCollapsible,
+            ]);
+
+        $itemsAttributes = (new FilamentComponentAttributeBag)
+            ->grid($this->getGridColumns())
+            ->merge([
+                'data-sortable-animation-duration' => $this->getReorderAnimationDuration(),
+                'x-on:end.stop' => 'reorder',
+                'x-ref' => 'reorderItems',
+            ], escape: false)
+            ->class(['fi-fo-repeater-items']);
+
+        $itemCount = count($items);
+        $itemIndex = 0;
+
+        ob_start(); ?>
+
+        <div <?= $outerAttributes->toHtml() ?>>
+            <?= $this->getReorderingDescriptionHtml($items) ?>
+            <?php if ($collapseAllActionIsVisible || $expandAllActionIsVisible) { ?>
+                <div
+                    <?= (new FilamentComponentAttributeBag)->class([
+                        'fi-fo-repeater-actions',
+                        'fi-hidden' => $itemCount < 2,
+                    ])->toHtml() ?>
+                >
+                    <?php if ($collapseAllActionIsVisible) { ?>
+                        <span x-on:click="collapseAll">
+                            <?= $collapseAllAction->toHtml() ?>
+                        </span>
+                    <?php } ?>
+
+                    <?php if ($expandAllActionIsVisible) { ?>
+                        <span x-on:click="expandAll">
+                            <?= $expandAllAction->toHtml() ?>
+                        </span>
+                    <?php } ?>
+                </div>
+            <?php } ?>
+
+            <?php if ($itemCount) { ?>
+                <ul x-sortable <?= $itemsAttributes->toHtml() ?>>
+                    <?php foreach ($items as $itemKey => $item) { ?>
+                        <?php
+                            $itemIndex++;
+                        $isFirst = $itemIndex === 1;
+                        $isLast = $itemIndex === $itemCount;
+
+                        $itemLabel = $this->getItemLabel($itemKey, $itemIndex - 1);
+                        $visibleExtraItemActions = array_filter(
+                            $extraItemActions,
+                            fn (Action $action): bool => $action(['item' => $itemKey])->isVisible(),
+                        );
+                        $itemCloneAction = $cloneAction(['item' => $itemKey]);
+                        $cloneActionIsVisible = $isCloneable && $itemCloneAction->isVisible();
+                        $itemDeleteAction = $deleteAction(['item' => $itemKey]);
+                        $deleteActionIsVisible = $isDeletable && $itemDeleteAction->isVisible();
+                        $reorderActionIsVisible = $isReorderableWithDragAndDrop && $reorderAction->isVisible();
+                        $itemMoveDownAction = $moveDownAction(['item' => $itemKey]);
+                        $itemMoveDownAction->disabled($isLast || $itemMoveDownAction->isDisabled())->extraAttributes($this->getReorderingActionAttributes($itemMoveDownAction, 'down', ! $isReorderableWithButtons), merge: true);
+                        $moveDownActionIsVisible = ($isReorderableWithButtons || $reorderActionIsVisible) && $itemMoveDownAction->isVisible();
+                        $itemMoveUpAction = $moveUpAction(['item' => $itemKey]);
+                        $itemMoveUpAction->disabled($isFirst || $itemMoveUpAction->isDisabled())->extraAttributes($this->getReorderingActionAttributes($itemMoveUpAction, 'up', ! $isReorderableWithButtons), merge: true);
+                        $moveUpActionIsVisible = ($isReorderableWithButtons || $reorderActionIsVisible) && $itemMoveUpAction->isVisible();
+                        $hasItemHeader = $hasItemHeaders && ($reorderActionIsVisible || $moveUpActionIsVisible || $moveDownActionIsVisible || filled($itemLabel) || $cloneActionIsVisible || $deleteActionIsVisible || $isCollapsible || $visibleExtraItemActions);
+                        ?>
+
+                        <li
+                            wire:ignore.self
+                            wire:key="<?= e($item->getLivewireKey()) ?>.item"
+                            x-data="item(<?= Js::from([
+                                'isCollapsed' => $this->isCollapsed($item),
+                                'collapseKey' => $persistCollapsed ? "filament:repeater:collapsed:{$key}-{$itemKey}" : null,
+                            ]) ?>)"
+                            x-on:repeater-expand.window="expandFromEvent"
+                            x-on:repeater-collapse.window="collapseFromEvent"
+                            x-on:expand="expand"
+                            x-sortable-item="<?= e($itemKey) ?>"
+                            <?= (new FilamentComponentAttributeBag)->class([
+                                'fi-fo-repeater-item',
+                                'fi-fo-repeater-item-has-header' => $hasItemHeader,
+                            ])->toHtml() ?>
+                            x-bind:class="itemClasses"
+                        >
+                            <?php if ($hasItemHeader) { ?>
+                                <div
+                                    <?php if ($isCollapsible) { ?>
+                                        x-on:click.stop="toggleCollapsed"
+                                    <?php } ?>
+                                    class="fi-fo-repeater-item-header"
+                                >
+                                    <?php if ($reorderActionIsVisible || $moveUpActionIsVisible || $moveDownActionIsVisible) { ?>
+                                        <ul class="fi-fo-repeater-item-header-start-actions">
+                                            <?php if ($reorderActionIsVisible) { ?>
+                                                <li x-on:click.stop>
+                                                    <?= $reorderAction->extraAttributes(['x-sortable-handle' => true], merge: true)->toHtml() ?>
+                                                </li>
+                                            <?php } ?>
+
+                                            <?php if ($moveUpActionIsVisible) { ?>
+                                                <li x-on:click.stop class="<?= $isReorderableWithButtons ? '' : 'fi-sr-only' ?>"><?= $itemMoveUpAction->toHtml() ?></li>
+                                            <?php } ?>
+                                            <?php if ($moveDownActionIsVisible) { ?>
+                                                <li x-on:click.stop class="<?= $isReorderableWithButtons ? '' : 'fi-sr-only' ?>"><?= $itemMoveDownAction->toHtml() ?></li>
+                                            <?php } ?>
+                                        </ul>
+                                    <?php } ?>
+
+                                    <?php if (filled($itemLabel)) { ?>
+                                        <<?= e($itemLabelHeadingTag) ?>
+                                            <?= (new FilamentComponentAttributeBag)->class([
+                                                'fi-fo-repeater-item-header-label',
+                                                'fi-truncated' => $isItemLabelTruncated,
+                                            ])->toHtml() ?>
+                                        >
+                                            <?= e($itemLabel) ?>
+                                            <?php if ($hasItemNumbers) { ?>
+                                                <?= e($itemIndex) ?>
+                                            <?php } ?>
+                                        </<?= e($itemLabelHeadingTag) ?>>
+                                    <?php } ?>
+
+                                    <?php if ($cloneActionIsVisible || $deleteActionIsVisible || $isCollapsible || $visibleExtraItemActions) { ?>
+                                        <ul class="fi-fo-repeater-item-header-end-actions">
+                                            <?php foreach ($visibleExtraItemActions as $extraItemAction) { ?>
+                                                <li x-on:click.stop><?= $extraItemAction(['item' => $itemKey])->toHtml() ?></li>
+                                            <?php } ?>
+
+                                            <?php if ($cloneActionIsVisible) { ?>
+                                                <li x-on:click.stop><?= $itemCloneAction->toHtml() ?></li>
+                                            <?php } ?>
+
+                                            <?php if ($deleteActionIsVisible) { ?>
+                                                <li x-on:click.stop><?= $itemDeleteAction->toHtml() ?></li>
+                                            <?php } ?>
+
+                                            <?php if ($isCollapsible) { ?>
+                                                <li class="fi-fo-repeater-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed">
+                                                    <div class="fi-fo-repeater-item-header-collapse-action">
+                                                        <?= $this->getAction('collapse')->toHtml() ?>
+                                                    </div>
+                                                    <div class="fi-fo-repeater-item-header-expand-action">
+                                                        <?= $this->getAction('expand')->toHtml() ?>
+                                                    </div>
+                                                </li>
+                                            <?php } ?>
+                                        </ul>
+                                    <?php } ?>
+                                </div>
+                            <?php } ?>
+
+                            <div x-show="! isCollapsed" class="fi-fo-repeater-item-content">
+                                <?= $item->toHtml() ?>
+                            </div>
+                        </li>
+
+                        <?php if (! $isLast) { ?>
+                            <?php if ($isAddable && $addBetweenAction(['afterItem' => $itemKey])->isVisible()) { ?>
+                                <li class="fi-fo-repeater-add-between-items-ctn">
+                                    <div class="fi-fo-repeater-add-between-items">
+                                        <?= $addBetweenAction(['afterItem' => $itemKey])->toHtml() ?>
+                                    </div>
+                                </li>
+                            <?php } elseif (filled($labelBetweenItems)) { ?>
+                                <li class="fi-fo-repeater-label-between-items-ctn">
+                                    <div class="fi-fo-repeater-label-between-items-divider-before"></div>
+                                    <span class="fi-fo-repeater-label-between-items"><?= e($labelBetweenItems) ?></span>
+                                    <div class="fi-fo-repeater-label-between-items-divider-after"></div>
+                                </li>
+                            <?php } ?>
+                        <?php } ?>
+                    <?php } ?>
+                </ul>
+            <?php } ?>
+
+            <?php if ($isAddable && $addAction->isVisible()) { ?>
+                <div
+                    <?= (new FilamentComponentAttributeBag)->class([
+                        'fi-fo-repeater-add',
+                        ($addActionAlignment instanceof Alignment) ? ('fi-align-' . $addActionAlignment->value) : $addActionAlignment,
+                    ])->toHtml() ?>
+                >
+                    <?= $addAction->toHtml() ?>
+                </div>
+            <?php } ?>
+        </div>
+
+        <?php return $this->wrapEmbeddedHtml(ob_get_clean(), labelTag: 'div');
+    }
+
+    protected function toSimpleEmbeddedHtml(): string
+    {
+        $items = $this->getItems();
+
+        $addAction = $this->getAction($this->getAddActionName());
+        $addActionAlignment = $this->getAddActionAlignment();
+        $cloneAction = $this->getAction($this->getCloneActionName());
+        $deleteAction = $this->getAction($this->getDeleteActionName());
+        $moveDownAction = $this->getAction($this->getMoveDownActionName());
+        $moveUpAction = $this->getAction($this->getMoveUpActionName());
+        $reorderAction = $this->getAction($this->getReorderActionName());
+        $extraItemActions = $this->getExtraItemActions();
+
+        $isAddable = $this->isAddable();
+        $isCloneable = $this->isCloneable();
+        $isDeletable = $this->isDeletable();
+        $isReorderableWithButtons = $this->isReorderableWithButtons();
+        $isReorderableWithDragAndDrop = $this->isReorderableWithDragAndDrop();
+
+        $id = $this->getId();
+
+        $outerAttributes = (new FilamentComponentAttributeBag)
+            ->merge($this->getExtraAttributes(), escape: false)
+            ->merge($this->getAlpineAttributes($items), escape: false)
+            ->merge([
+                'aria-describedby' => $this->getAccessibilityAttributes()['aria-describedby'] ?? null,
+                'aria-labelledby' => "{$id}-label",
+                'id' => $id,
+                'role' => 'group',
+            ], escape: false)
+            ->class(['fi-fo-simple-repeater']);
+
+        $itemsAttributes = (new FilamentComponentAttributeBag)
+            ->grid($this->getGridColumns())
+            ->merge([
+                'data-sortable-animation-duration' => $this->getReorderAnimationDuration(),
+                'x-on:end.stop' => 'reorder',
+                'x-ref' => 'reorderItems',
+            ], escape: false)
+            ->class(['fi-fo-simple-repeater-items']);
+
+        $itemCount = count($items);
+        $itemIndex = 0;
+
+        ob_start(); ?>
+
+        <div <?= $outerAttributes->toHtml() ?>>
+            <?= $this->getReorderingDescriptionHtml($items) ?>
+            <?php if ($itemCount) { ?>
+                <ul x-sortable <?= $itemsAttributes->toHtml() ?>>
+                    <?php foreach ($items as $itemKey => $item) { ?>
+                        <?php
+                            $itemIndex++;
+                        $isFirst = $itemIndex === 1;
+                        $isLast = $itemIndex === $itemCount;
+
+                        $visibleExtraItemActions = array_filter(
+                            $extraItemActions,
+                            fn (Action $action): bool => $action(['item' => $itemKey])->isVisible(),
+                        );
+                        $itemCloneAction = $cloneAction(['item' => $itemKey]);
+                        $cloneActionIsVisible = $isCloneable && $itemCloneAction->isVisible();
+                        $itemDeleteAction = $deleteAction(['item' => $itemKey]);
+                        $deleteActionIsVisible = $isDeletable && $itemDeleteAction->isVisible();
+                        $reorderActionIsVisible = $isReorderableWithDragAndDrop && $reorderAction->isVisible();
+                        $itemMoveDownAction = $moveDownAction(['item' => $itemKey]);
+                        $itemMoveDownAction->disabled($isLast || $itemMoveDownAction->isDisabled())->extraAttributes($this->getReorderingActionAttributes($itemMoveDownAction, 'down', ! $isReorderableWithButtons), merge: true);
+                        $moveDownActionIsVisible = ($isReorderableWithButtons || $reorderActionIsVisible) && $itemMoveDownAction->isVisible();
+                        $itemMoveUpAction = $moveUpAction(['item' => $itemKey]);
+                        $itemMoveUpAction->disabled($isFirst || $itemMoveUpAction->isDisabled())->extraAttributes($this->getReorderingActionAttributes($itemMoveUpAction, 'up', ! $isReorderableWithButtons), merge: true);
+                        $moveUpActionIsVisible = ($isReorderableWithButtons || $reorderActionIsVisible) && $itemMoveUpAction->isVisible();
+                        ?>
+
+                        <li
+                            wire:key="<?= e($item->getLivewireKey()) ?>.item"
+                            x-sortable-item="<?= e($itemKey) ?>"
+                            class="fi-fo-simple-repeater-item"
+                        >
+                            <div class="fi-fo-simple-repeater-item-content">
+                                <?= $item->toHtml() ?>
+                            </div>
+
+                            <?php if ($reorderActionIsVisible || $moveUpActionIsVisible || $moveDownActionIsVisible || $cloneActionIsVisible || $deleteActionIsVisible || $visibleExtraItemActions) { ?>
+                                <ul class="fi-fo-simple-repeater-item-actions">
+                                    <?php if ($reorderActionIsVisible) { ?>
+                                        <li x-on:click.stop>
+                                            <?= $reorderAction->extraAttributes(['x-sortable-handle' => true], merge: true)->toHtml() ?>
+                                        </li>
+                                    <?php } ?>
+
+                                    <?php if ($moveUpActionIsVisible) { ?>
+                                        <li x-on:click.stop class="<?= $isReorderableWithButtons ? '' : 'fi-sr-only' ?>">
+                                            <?= $itemMoveUpAction->toHtml() ?>
+                                        </li>
+                                    <?php } ?>
+                                    <?php if ($moveDownActionIsVisible) { ?>
+                                        <li x-on:click.stop class="<?= $isReorderableWithButtons ? '' : 'fi-sr-only' ?>">
+                                            <?= $itemMoveDownAction->toHtml() ?>
+                                        </li>
+                                    <?php } ?>
+
+                                    <?php foreach ($visibleExtraItemActions as $extraItemAction) { ?>
+                                        <li x-on:click.stop>
+                                            <?= $extraItemAction(['item' => $itemKey])->toHtml() ?>
+                                        </li>
+                                    <?php } ?>
+
+                                    <?php if ($cloneActionIsVisible) { ?>
+                                        <li x-on:click.stop>
+                                            <?= $itemCloneAction->toHtml() ?>
+                                        </li>
+                                    <?php } ?>
+
+                                    <?php if ($deleteActionIsVisible) { ?>
+                                        <li x-on:click.stop>
+                                            <?= $itemDeleteAction->toHtml() ?>
+                                        </li>
+                                    <?php } ?>
+                                </ul>
+                            <?php } ?>
+                        </li>
+                    <?php } ?>
+                </ul>
+            <?php } ?>
+
+            <?php if ($isAddable && $addAction->isVisible()) { ?>
+                <div
+                    <?= (new FilamentComponentAttributeBag)->class([
+                        'fi-fo-simple-repeater-add',
+                        ($addActionAlignment instanceof Alignment) ? ('fi-align-' . $addActionAlignment->value) : $addActionAlignment,
+                    ])->toHtml() ?>
+                >
+                    <?= $addAction->toHtml() ?>
+                </div>
+            <?php } ?>
+        </div>
+
+        <?php return $this->wrapEmbeddedHtml(ob_get_clean(), labelTag: 'div');
+    }
+
+    protected function toTableEmbeddedHtml(): string
+    {
+        $items = $this->getItems();
+
+        $addAction = $this->getAction($this->getAddActionName());
+        $addActionAlignment = $this->getAddActionAlignment();
+        $cloneAction = $this->getAction($this->getCloneActionName());
+        $deleteAction = $this->getAction($this->getDeleteActionName());
+        $moveDownAction = $this->getAction($this->getMoveDownActionName());
+        $moveUpAction = $this->getAction($this->getMoveUpActionName());
+        $reorderAction = $this->getAction($this->getReorderActionName());
+        $extraItemActions = $this->getExtraItemActions();
+
+        $isAddable = $this->isAddable();
+        $isCloneable = $this->isCloneable();
+        $isDeletable = $this->isDeletable();
+        $isReorderableWithButtons = $this->isReorderableWithButtons();
+        $isReorderableWithDragAndDrop = $this->isReorderableWithDragAndDrop();
+
+        $tableColumns = $this->getTableColumns() ?? [];
+
+        $isCompact = $this->isCompact();
+
+        $id = $this->getId();
+
+        $outerAttributes = (new FilamentComponentAttributeBag)
+            ->merge($this->getExtraAttributes(), escape: false)
+            ->merge($this->getAlpineAttributes($items), escape: false)
+            ->merge([
+                'aria-describedby' => $this->getAccessibilityAttributes()['aria-describedby'] ?? null,
+                'aria-labelledby' => "{$id}-label",
+                'id' => $id,
+                'role' => 'group',
+            ], escape: false)
+            ->class([
+                'fi-fo-table-repeater',
+                'fi-compact' => $isCompact,
+            ]);
+
+        $tbodyAttributes = (new FilamentComponentAttributeBag)
+            ->merge([
+                'data-sortable-animation-duration' => $this->getReorderAnimationDuration(),
+                'x-on:end.stop' => 'reorder',
+                'x-ref' => 'reorderItems',
+            ], escape: false);
+
+        $itemCount = count($items);
+        $itemIndex = 0;
+        $hasReorderColumn = ($itemCount > 1) && ($isReorderableWithButtons || $isReorderableWithDragAndDrop);
+        $hasActionsColumn = count($extraItemActions) || $isCloneable || $isDeletable;
+
+        ob_start(); ?>
+
+        <div <?= $outerAttributes->toHtml() ?>>
+            <?= $this->getReorderingDescriptionHtml($items) ?>
+            <?php if ($itemCount) { ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <?php if ($hasReorderColumn) { ?>
+                                <th scope="col" class="fi-fo-table-repeater-empty-header-cell">
+                                    <span class="fi-sr-only"><?= e(__('filament-forms::components.repeater.columns.reorder.label')) ?></span>
+                                </th>
+                            <?php } ?>
+
+                            <?php foreach ($tableColumns as $column) { ?>
+                                <?php
+                                    $columnAlignment = $column->getAlignment();
+                                $columnWidth = $column->getWidth();
+                                $thAttributes = (new FilamentComponentAttributeBag)
+                                    ->class([
+                                        'fi-wrapped' => $column->canHeaderWrap(),
+                                        ($columnAlignment instanceof Alignment) ? ('fi-align-' . $columnAlignment->value) : $columnAlignment,
+                                    ]);
+
+                                if (filled($columnWidth)) {
+                                    $thAttributes = $thAttributes->style(['width: ' . e($columnWidth)]);
+                                }
+                                ?>
+                                <th scope="col" <?= $thAttributes->toHtml() ?>>
+                                    <?php if (! $column->isHeaderLabelHidden()) { ?>
+                                        <?= e($column->getLabel()) ?><?php if ($column->isMarkedAsRequired()) { ?><sup class="fi-fo-table-repeater-header-required-mark">*</sup><?php } ?>
+                                    <?php } else { ?>
+                                        <span class="fi-sr-only">
+                                            <?= e($column->getLabel()) ?>
+                                        </span>
+                                    <?php } ?>
+                                </th>
+                            <?php } ?>
+
+                            <?php if ($hasActionsColumn) { ?>
+                                <th scope="col" class="fi-fo-table-repeater-empty-header-cell">
+                                    <span class="fi-sr-only"><?= e(__('filament-forms::components.repeater.columns.actions.label')) ?></span>
+                                </th>
+                            <?php } ?>
+                        </tr>
+                    </thead>
+
+                    <tbody x-sortable <?= $tbodyAttributes->toHtml() ?>>
+                        <?php foreach ($items as $itemKey => $item) { ?>
+                            <?php
+                                $itemIndex++;
+                            $isFirst = $itemIndex === 1;
+                            $isLast = $itemIndex === $itemCount;
+
+                            $visibleExtraItemActions = array_filter(
+                                $extraItemActions,
+                                fn (Action $action): bool => $action(['item' => $itemKey])->isVisible(),
+                            );
+                            $itemCloneAction = $cloneAction(['item' => $itemKey]);
+                            $cloneActionIsVisible = $isCloneable && $itemCloneAction->isVisible();
+                            $itemDeleteAction = $deleteAction(['item' => $itemKey]);
+                            $deleteActionIsVisible = $isDeletable && $itemDeleteAction->isVisible();
+                            $reorderActionIsVisible = $isReorderableWithDragAndDrop && $reorderAction->isVisible();
+                            $itemMoveDownAction = $moveDownAction(['item' => $itemKey]);
+                            $itemMoveDownAction->disabled($isLast || $itemMoveDownAction->isDisabled())->extraAttributes($this->getReorderingActionAttributes($itemMoveDownAction, 'down', ! $isReorderableWithButtons), merge: true);
+                            $moveDownActionIsVisible = ($isReorderableWithButtons || $reorderActionIsVisible) && $itemMoveDownAction->isVisible();
+                            $itemMoveUpAction = $moveUpAction(['item' => $itemKey]);
+                            $itemMoveUpAction->disabled($isFirst || $itemMoveUpAction->isDisabled())->extraAttributes($this->getReorderingActionAttributes($itemMoveUpAction, 'up', ! $isReorderableWithButtons), merge: true);
+                            $moveUpActionIsVisible = ($isReorderableWithButtons || $reorderActionIsVisible) && $itemMoveUpAction->isVisible();
+                            ?>
+
+                            <tr
+                                wire:key="<?= e($item->getLivewireKey()) ?>.item"
+                                x-sortable-item="<?= e($itemKey) ?>"
+                            >
+                                <?php if ($hasReorderColumn) { ?>
+                                    <td>
+                                        <?php if ($reorderActionIsVisible || $moveUpActionIsVisible || $moveDownActionIsVisible) { ?>
+                                            <div class="fi-fo-table-repeater-actions">
+                                                <?php if ($reorderActionIsVisible) { ?>
+                                                    <div x-on:click.stop>
+                                                        <?= $reorderAction->extraAttributes(['x-sortable-handle' => true], merge: true)->toHtml() ?>
+                                                    </div>
+                                                <?php } ?>
+
+                                                <?php if ($moveUpActionIsVisible) { ?>
+                                                    <div x-on:click.stop class="<?= $isReorderableWithButtons ? '' : 'fi-sr-only' ?>">
+                                                        <?= $itemMoveUpAction->toHtml() ?>
+                                                    </div>
+                                                <?php } ?>
+                                                <?php if ($moveDownActionIsVisible) { ?>
+                                                    <div x-on:click.stop class="<?= $isReorderableWithButtons ? '' : 'fi-sr-only' ?>">
+                                                        <?= $itemMoveDownAction->toHtml() ?>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
+                                        <?php } ?>
+                                    </td>
+                                <?php } ?>
+
+                                <?php
+                                    $counter = 0;
+                            ?>
+
+                                <?php foreach ($item->getComponents(withHidden: true) as $schemaComponent) { ?>
+                                    <?php
+                                    throw_unless(
+                                        $schemaComponent instanceof Component,
+                                        new \Exception('Table repeaters must only contain schema components, but [' . $schemaComponent::class . '] was used.'),
+                                    );
+                                    ?>
+
+                                    <?php if (count($tableColumns) > $counter) { ?>
+                                        <?php if ($schemaComponent instanceof Hidden) { ?>
+                                            <?= $schemaComponent->toHtml() ?>
+                                        <?php } else { ?>
+                                            <?php
+                                                $counter++;
+                                            ?>
+
+                                            <?php if ($schemaComponent->isVisible()) { ?>
+                                                <?php
+                                                    $currentColumn = $tableColumns[$counter - 1] ?? null;
+                                                $columnVerticalAlignment = $currentColumn?->getVerticalAlignment();
+                                                $tdAttributes = (new FilamentComponentAttributeBag)
+                                                    ->class([
+                                                        ($columnVerticalAlignment instanceof VerticalAlignment) ? ('fi-vertical-align-' . $columnVerticalAlignment->value) : (is_string($columnVerticalAlignment) ? $columnVerticalAlignment : ''),
+                                                    ]);
+                                                ?>
+                                                <td <?= $tdAttributes->toHtml() ?>>
+                                                    <?= $schemaComponent->toSchemaHtml() ?>
+                                                </td>
+                                            <?php } else { ?>
+                                                <td class="fi-hidden"></td>
+                                            <?php } ?>
+                                        <?php } ?>
+                                    <?php } ?>
+                                <?php } ?>
+
+                                <?php if ($hasActionsColumn) { ?>
+                                    <td>
+                                        <?php if ($visibleExtraItemActions || $cloneActionIsVisible || $deleteActionIsVisible) { ?>
+                                            <div class="fi-fo-table-repeater-actions">
+                                                <?php foreach ($visibleExtraItemActions as $extraItemAction) { ?>
+                                                    <div x-on:click.stop>
+                                                        <?= $extraItemAction(['item' => $itemKey])->toHtml() ?>
+                                                    </div>
+                                                <?php } ?>
+
+                                                <?php if ($cloneActionIsVisible) { ?>
+                                                    <div x-on:click.stop>
+                                                        <?= $itemCloneAction->toHtml() ?>
+                                                    </div>
+                                                <?php } ?>
+
+                                                <?php if ($deleteActionIsVisible) { ?>
+                                                    <div x-on:click.stop>
+                                                        <?= $itemDeleteAction->toHtml() ?>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
+                                        <?php } ?>
+                                    </td>
+                                <?php } ?>
+                            </tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            <?php } ?>
+
+            <?php if ($isAddable && $addAction->isVisible()) { ?>
+                <div
+                    <?= (new FilamentComponentAttributeBag)->class([
+                        'fi-fo-table-repeater-add',
+                        ($addActionAlignment instanceof Alignment) ? ('fi-align-' . $addActionAlignment->value) : $addActionAlignment,
+                    ])->toHtml() ?>
+                >
+                    <?= $addAction->toHtml() ?>
+                </div>
+            <?php } ?>
+        </div>
+
+        <?php return $this->wrapEmbeddedHtml(ob_get_clean(), labelTag: 'div');
     }
 
     public function getLabelBetweenItems(): ?string
@@ -1539,5 +2235,65 @@ class Repeater extends Field implements CanConcealComponents, HasExtraItemAction
         }
 
         return ! $this->isLive();
+    }
+
+    /**
+     * @param  array<Schema>  $items
+     * @return array<string, mixed>
+     */
+    protected function getAlpineAttributes(array $items): array
+    {
+        return [
+            'data-reorder-owner' => true,
+            'data-reorder-items' => e(json_encode(array_map('strval', array_keys($items)))),
+            'x-load' => true,
+            'x-load-src' => FilamentAsset::getAlpineComponentSrc('repeater', 'filament/forms'),
+            'x-data' => 'repeaterFormComponent(' . Js::from([
+                'statePath' => $this->getStatePath(),
+                'schemaComponent' => $this->getKey(),
+                'moveUpAction' => $this->getMoveUpActionName(),
+                'moveDownAction' => $this->getMoveDownActionName(),
+                'reorderAction' => $this->getReorderActionName(),
+                'message' => __('filament-forms::components.repeater.reordering.moved'),
+                'hasCustomReorderAction' => (bool) $this->modifyReorderActionUsing,
+            ]) . ')',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    protected function getReorderingActionAttributes(Action $action, string $direction, bool $isVisuallyHidden): array
+    {
+        return [
+            ...($isVisuallyHidden ? ['tabindex' => -1, 'data-reorder-hidden' => true] : []),
+            'data-reorder-direction' => $direction,
+            'data-reorder-action' => ($action->getActionFunction() && (! $action->getLivewireEventClickHandler()) && blank($action->getParentActionCallLivewireClickHandler())) ? $action->getLivewireClickHandler() : null,
+            'aria-describedby' => $this->getId() . '-item-' . md5((string) $action->getArguments()['item']),
+        ];
+    }
+
+    /** @param array<Schema> $items */
+    protected function getReorderingDescriptionHtml(array $items): string
+    {
+        $html = '<span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>';
+        $position = 0;
+
+        foreach ($items as $itemKey => $item) {
+            $label = ($this->hasItemLabels() ? $this->getItemLabel((string) $itemKey, $position) : null) ?? __('filament-forms::components.repeater.reordering.item');
+
+            if ($label instanceof Htmlable) {
+                $label = html_entity_decode(strip_tags($label->toHtml()), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
+
+            $label = trim($label);
+
+            if ($label === '') {
+                $label = __('filament-forms::components.repeater.reordering.item');
+            }
+
+            $description = __('filament-forms::components.repeater.reordering.position', ['label' => $label, 'position' => ++$position, 'count' => count($items)]);
+            $html .= '<span class="fi-sr-only" data-reorder-description="' . e($itemKey) . '" data-reorder-label="' . e($label) . '" id="' . e($this->getId() . '-item-' . md5((string) $itemKey)) . '">' . e($description) . '</span>';
+        }
+
+        return $html;
     }
 }

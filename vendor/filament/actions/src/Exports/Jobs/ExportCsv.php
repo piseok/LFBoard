@@ -2,10 +2,10 @@
 
 namespace Filament\Actions\Exports\Jobs;
 
+use AnourValar\EloquentSerialize\Facades\EloquentSerializeFacade;
 use Carbon\CarbonInterface;
 use Filament\Actions\Exports\Exporter;
 use Filament\Actions\Exports\Models\Export;
-use Filament\Support\EloquentSerializer\EloquentSerializer;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -17,6 +17,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use League\Csv\Writer;
+use League\Flysystem\UnableToWriteFile;
 use SplTempFileObject;
 use Throwable;
 
@@ -79,7 +80,7 @@ class ExportCsv implements ShouldQueue
             $csv = Writer::from(new SplTempFileObject);
             $csv->setDelimiter($this->exporter::getCsvDelimiter());
 
-            $query = app(EloquentSerializer::class)->unserialize($this->query);
+            $query = EloquentSerializeFacade::unserialize($this->query);
 
             foreach ($this->exporter->getCachedColumns() as $column) {
                 $column->applyRelationshipAggregates($query);
@@ -125,7 +126,9 @@ class ExportCsv implements ShouldQueue
                         'successful_rows' => new Expression('total_rows'),
                     ]);
 
-                $this->export->getFileDisk()->put($filePath, $csv->toString(), Filesystem::VISIBILITY_PRIVATE);
+                if (! $this->export->getFileDisk()->put($filePath, $csv->toString(), Filesystem::VISIBILITY_PRIVATE)) {
+                    throw UnableToWriteFile::atLocation($filePath);
+                }
             });
         } finally {
             auth()->forgetGuards();

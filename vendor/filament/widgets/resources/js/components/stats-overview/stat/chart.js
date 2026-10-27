@@ -1,15 +1,53 @@
-import Chart from 'chart.js/auto'
+import {
+    CategoryScale,
+    Chart,
+    Filler,
+    LineController,
+    LineElement,
+    LinearScale,
+    PointElement,
+} from 'chart.js'
 
-export default function statsOverviewStatChart({
-    dataChecksum,
-    labels,
-    values,
-}) {
+import readCustomProperties from '../../../utilities/custom-properties.js'
+
+Chart.register(
+    CategoryScale,
+    Filler,
+    LineController,
+    LineElement,
+    LinearScale,
+    PointElement,
+)
+
+export default function statsOverviewStatChart({ key, labels, values }) {
+    let isDestroyed = false
+
     return {
-        dataChecksum,
+        key,
+
+        chartDataUpdateEventTarget: null,
+
+        chartDataUpdateListener: null,
+
+        themeEffect: null,
 
         init() {
-            Alpine.effect(() => {
+            this.chartDataUpdateEventTarget = this.$wire.$el
+            this.chartDataUpdateListener = (event) => {
+                if (event.detail.key === this.key) {
+                    this.updateChartData(event.detail.data)
+                }
+            }
+            this.chartDataUpdateEventTarget.addEventListener(
+                'updateStatsOverviewChartData',
+                this.chartDataUpdateListener,
+            )
+
+            this.themeEffect = Alpine.effect(() => {
+                if (isDestroyed) {
+                    return
+                }
+
                 Alpine.store('theme')
 
                 this.$nextTick(() => this.updateChartTheme())
@@ -19,7 +57,7 @@ export default function statsOverviewStatChart({
                 '(prefers-color-scheme: dark)',
             )
             this.systemThemeListener = () => {
-                if (Alpine.store('theme') !== 'system') {
+                if (isDestroyed || Alpine.store('theme') !== 'system') {
                     return
                 }
 
@@ -37,6 +75,10 @@ export default function statsOverviewStatChart({
         },
 
         initChart() {
+            if (isDestroyed) {
+                return
+            }
+
             if (
                 !this.$refs.canvas ||
                 !this.$refs.backgroundColorElement ||
@@ -45,12 +87,13 @@ export default function statsOverviewStatChart({
                 return
             }
 
-            // Alpine re-initializes this component when `dataChecksum` changes (on data
-            // updates from Livewire polling). The canvas is reused, so any prior Chart.js
-            // instance must be torn down before constructing a new one.
+            // Defensively tear down any pre-existing chart bound to this canvas before
+            // constructing a new one (the canvas is reused if the component re-initializes).
             this.getChart()?.destroy()
 
             const { backgroundColor, borderColor } = this.getChartColors()
+            const { borderWidth, fill, lineTension } =
+                this.getChartCustomProperties()
 
             new Chart(this.$refs.canvas, {
                 type: 'line',
@@ -59,9 +102,9 @@ export default function statsOverviewStatChart({
                     datasets: [
                         {
                             data: values,
-                            borderWidth: 2,
-                            fill: 'start',
-                            tension: 0.5,
+                            borderWidth,
+                            fill,
+                            tension: lineTension,
                             backgroundColor,
                             borderColor,
                         },
@@ -97,7 +140,27 @@ export default function statsOverviewStatChart({
             })
         },
 
+        updateChartData(newValues) {
+            if (isDestroyed) {
+                return
+            }
+
+            const chart = this.getChart()
+
+            if (!chart) {
+                return
+            }
+
+            chart.data.labels = newValues.map((value, index) => index)
+            chart.data.datasets[0].data = newValues
+            chart.update('none')
+        },
+
         updateChartTheme() {
+            if (isDestroyed) {
+                return
+            }
+
             const chart = this.getChart()
 
             if (!chart) {
@@ -106,9 +169,19 @@ export default function statsOverviewStatChart({
 
             const { backgroundColor, borderColor } = this.getChartColors()
 
+            // The custom properties are re-read too: a theme may legitimately give light
+            // and dark mode a different line.
+            const { borderWidth, fill, lineTension } =
+                this.getChartCustomProperties()
+
             chart.data.datasets[0].backgroundColor = backgroundColor
             chart.data.datasets[0].borderColor = borderColor
-            chart.update('none')
+            chart.data.datasets[0].borderWidth = borderWidth
+            chart.data.datasets[0].fill = fill
+            chart.data.datasets[0].tension = lineTension
+
+            // `'resize'` rather than `'none'`, for the reason given in the chart widget.
+            chart.update('resize')
         },
 
         getChart() {
@@ -129,7 +202,26 @@ export default function statsOverviewStatChart({
             }
         },
 
+        // The parts of the sparkline that a stylesheet cannot otherwise reach, since
+        // Chart.js paints them onto a bare `<canvas>`. Each fallback is the value the
+        // sparkline has always used.
+        getChartCustomProperties() {
+            const { number, keyword } = readCustomProperties(this.$el)
+
+            return {
+                borderWidth: number('--stat-chart-border-width', 2),
+                fill: keyword('--stat-chart-fill', 'start'),
+                lineTension: number('--stat-chart-line-tension', 0.5),
+            }
+        },
+
         destroy() {
+            isDestroyed = true
+            Alpine.release(this.themeEffect)
+            this.chartDataUpdateEventTarget?.removeEventListener(
+                'updateStatsOverviewChartData',
+                this.chartDataUpdateListener,
+            )
             this.systemThemeMediaQuery?.removeEventListener(
                 'change',
                 this.systemThemeListener,

@@ -3,15 +3,21 @@
 namespace Filament\Support;
 
 use BackedEnum;
+use Closure;
+use Composer\Autoload\ClassLoader;
+use Composer\ClassMapGenerator\ClassMapGenerator;
+use Composer\InstalledVersions;
 use Filament\Support\Contracts\LoadingIndicator;
 use Filament\Support\Contracts\ScalableIcon;
 use Filament\Support\Enums\IconSize;
 use Filament\Support\Facades\FilamentColor;
 use Filament\Support\Facades\FilamentIcon;
 use Filament\Support\Facades\FilamentView;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Support\View\Components\Contracts\HasColor;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Http\Request;
@@ -21,7 +27,15 @@ use Illuminate\Support\Str;
 use Illuminate\Translation\MessageSelector;
 use Illuminate\View\ComponentAttributeBag;
 use Illuminate\View\ComponentSlot;
+use ReflectionClass;
 use Throwable;
+
+if (! function_exists('Filament\Support\encode_key_segments')) {
+    function encode_key_segments(string ...$segments): string
+    {
+        return implode('', array_map(static fn (string $segment): string => strlen($segment) . ':' . $segment, $segments));
+    }
+}
 
 if (! function_exists('Filament\Support\format_money')) {
     /**
@@ -53,7 +67,9 @@ if (! function_exists('Filament\Support\get_model_label')) {
      */
     function get_model_label(string $model): string
     {
-        return (string) str($model)
+        static $modelLabels = [];
+
+        return $modelLabels[$model] ??= (string) str($model)
             ->classBasename()
             ->kebab()
             ->replace('-', ' ');
@@ -63,7 +79,9 @@ if (! function_exists('Filament\Support\get_model_label')) {
 if (! function_exists('Filament\Support\locale_has_pluralization')) {
     function locale_has_pluralization(): bool
     {
-        return (new MessageSelector)->getPluralIndex(app()->getLocale(), 10) > 0;
+        $locale = app()->getLocale();
+
+        return (new MessageSelector)->getPluralIndex($locale, 10) > 0;
     }
 }
 
@@ -87,13 +105,21 @@ if (! function_exists('Filament\Support\prepare_inherited_attributes')) {
     {
         $originalAttributes = $attributes->getAttributes();
 
-        $attributes->setAttributes(
-            collect($originalAttributes)
-                ->filter(fn ($value, string $name): bool => ! str($name)->startsWith(['x-', 'data-']))
-                ->mapWithKeys(fn ($value, string $name): array => [Str::camel($name) => $value])
-                ->merge($originalAttributes)
-                ->all(),
-        );
+        $preparedAttributes = [];
+
+        foreach ($originalAttributes as $name => $value) {
+            $name = (string) $name;
+
+            if (str_starts_with($name, 'x-') || str_starts_with($name, 'data-')) {
+                continue;
+            }
+
+            $preparedAttributes[Str::camel($name)] = $value;
+        }
+
+        $preparedAttributes = array_merge($preparedAttributes, $originalAttributes);
+
+        $attributes->setAttributes($preparedAttributes);
 
         return $attributes;
     }
@@ -117,7 +143,7 @@ if (! function_exists('Filament\Support\is_slot_empty')) {
 if (! function_exists('Filament\Support\is_app_url')) {
     function is_app_url(string $url): bool
     {
-        if (str($url)->startsWith('/') && ! str($url)->startsWith('//')) {
+        if (str_starts_with($url, '/') && ! str_starts_with($url, '//')) {
             return true;
         }
 
@@ -174,7 +200,7 @@ if (! function_exists('Filament\Support\generate_icon_html')) {
 
         $size ??= IconSize::Medium;
 
-        $attributes = ($attributes ?? new ComponentAttributeBag)->class([
+        $attributes = ($attributes ?? new FilamentComponentAttributeBag)->class([
             'fi-icon',
             "fi-size-{$size->value}",
         ]);
@@ -188,6 +214,17 @@ if (! function_exists('Filament\Support\generate_icon_html')) {
         }
 
         if (is_string($icon) && str_contains($icon, '/')) {
+            // A custom image-path icon carries no intrinsic accessible name, so it would be announced by
+            // its filename. Default it to decorative (`alt=""`) unless the caller named it, matching the
+            // baked-in `aria-hidden` that the shipped SVG icon sets already carry.
+            if (
+                blank($attributes->get('alt')) &&
+                blank($attributes->get('aria-label')) &&
+                blank($attributes->get('aria-labelledby'))
+            ) {
+                $attributes = $attributes->merge(['alt' => ''], escape: false);
+            }
+
             $icon = e($icon);
 
             return new HtmlString(<<<HTML
@@ -210,7 +247,7 @@ if (! function_exists('Filament\Support\generate_loading_indicator_html')) {
     {
         $size ??= IconSize::Medium;
 
-        $attributes = ($attributes ?? new ComponentAttributeBag)->class([
+        $attributes = ($attributes ?? new FilamentComponentAttributeBag)->class([
             'fi-icon fi-loading-indicator',
             "fi-size-{$size->value}",
         ]);
@@ -324,6 +361,35 @@ if (! function_exists('Filament\Support\generate_search_term_expression')) {
     }
 }
 
+if (! function_exists('Filament\Support\generate_search_pattern')) {
+    /**
+     * @internal This function is only to be used internally by Filament and is subject to change at any time. Please do not use this function in your own code.
+     */
+    function generate_search_pattern(string $search, bool $hasLeadingWildcard, bool $hasTrailingWildcard): string
+    {
+        $search = str_replace(
+            ['!', '[', '%', '_'],
+            ['!!', '![', '!%', '!_'],
+            $search,
+        );
+
+        return ($hasLeadingWildcard ? '%' : '') . $search . ($hasTrailingWildcard ? '%' : '');
+    }
+}
+
+if (! function_exists('Filament\Support\apply_search_constraint')) {
+    /**
+     * @internal This function is only to be used internally by Filament and is subject to change at any time. Please do not use this function in your own code.
+     */
+    function apply_search_constraint(Builder $query, string | Expression $column, string $pattern, string $boolean = 'and', bool $isInverse = false): Builder
+    {
+        $column = $query->getQuery()->getGrammar()->wrap($column);
+        $operator = $isInverse ? 'not like' : 'like';
+
+        return $query->whereRaw("{$column} {$operator} ? escape '!'", [$pattern], $boolean);
+    }
+}
+
 if (! function_exists('Filament\Support\original_request')) {
     function original_request(): Request
     {
@@ -331,17 +397,117 @@ if (! function_exists('Filament\Support\original_request')) {
     }
 }
 
+if (! function_exists('Filament\Support\get_composer_vendor_directory')) {
+    /** @internal */
+    function get_composer_vendor_directory(): string
+    {
+        static $directory;
+
+        return $directory ??= dirname((new ReflectionClass(InstalledVersions::class))->getFileName(), 2);
+    }
+}
+
+if (! function_exists('Filament\Support\is_path_within_directory')) {
+    /** @internal */
+    function is_path_within_directory(string $path, string $directory): bool
+    {
+        /** @var array<string, array{string, string, bool}> $directoryConfigurations */
+        static $directoryConfigurations = [];
+
+        $path = str_replace('\\', '/', $path);
+
+        if (! isset($directoryConfigurations[$directory])) {
+            $normalizedDirectory = rtrim(str_replace('\\', '/', $directory), '/');
+            $directoryPrefix = $normalizedDirectory . '/';
+
+            $directoryConfigurations[$directory] = [
+                $normalizedDirectory,
+                $directoryPrefix,
+                preg_match('/^(?:[a-z]:\/|\/\/)/i', $directoryPrefix) === 1,
+            ];
+        }
+
+        [$directory, $directoryPrefix, $isCaseInsensitive] = $directoryConfigurations[$directory];
+
+        if ($isCaseInsensitive) {
+            return (strcasecmp($path, $directory) === 0) || (strncasecmp($path, $directoryPrefix, strlen($directoryPrefix)) === 0);
+        }
+
+        return ($path === $directory) || str_starts_with($path, $directoryPrefix);
+    }
+}
+
+if (! function_exists('Filament\Support\is_path_within_vendor_directory')) {
+    /** @internal */
+    function is_path_within_vendor_directory(string $path, string $applicationDirectory): bool
+    {
+        $composerVendorDirectory = get_composer_vendor_directory();
+
+        if (
+            (! is_path_within_directory($applicationDirectory, $composerVendorDirectory)) &&
+            is_path_within_directory($path, $composerVendorDirectory)
+        ) {
+            return true;
+        }
+
+        if (! is_path_within_directory($path, $applicationDirectory)) {
+            return false;
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $applicationDirectory = rtrim(str_replace('\\', '/', $applicationDirectory), '/');
+        $relativePath = ltrim(substr($path, strlen($applicationDirectory)), '/');
+        $isCaseInsensitive = preg_match('/^(?:[a-z]:\/|\/\/)/i', $applicationDirectory . '/') === 1;
+        $vendorDirectoryPattern = $isCaseInsensitive
+            ? '~(?:^|/)vendor(?:/|$)~i'
+            : '~(?:^|/)vendor(?:/|$)~';
+
+        return preg_match($vendorDirectoryPattern, $relativePath) === 1;
+    }
+}
+
 if (! function_exists('Filament\Support\discover_app_classes')) {
     /**
      * @return array<class-string>
      */
-    function discover_app_classes(?string $parentClass = null): array
+    function discover_app_classes(?string $parentClass = null, ?Closure $onIndexingFailure = null): array
     {
-        $classLoader = require 'vendor/autoload.php';
+        $vendorDirectory = get_composer_vendor_directory();
+        $classLoader = ClassLoader::getRegisteredLoaders()[$vendorDirectory];
+        $applicationPath = (string) InstalledVersions::getRootPackage()['install_path'];
+
+        try {
+            $classMapGenerator = (new ClassMapGenerator)->avoidDuplicateScans();
+
+            foreach ([...$classLoader->getPrefixesPsr4(), '' => $classLoader->getFallbackDirsPsr4()] as $namespace => $directories) {
+                foreach ($directories as $directory) {
+                    if (
+                        (! is_path_within_directory($directory, $applicationPath)) ||
+                        is_path_within_vendor_directory($directory, $applicationPath)
+                    ) {
+                        continue;
+                    }
+
+                    $classMapGenerator->scanPaths(
+                        path: $directory,
+                        autoloadType: 'psr-4',
+                        namespace: $namespace,
+                        excludedDirs: ['vendor'],
+                    );
+                }
+            }
+
+            $classLoader->addClassMap($classMapGenerator->getClassMap()->getMap());
+        } catch (Throwable $exception) {
+            $onIndexingFailure?->__invoke($exception);
+        }
 
         return collect($classLoader->getClassMap())
-            ->filter(function (string $file, string $class) use ($parentClass): bool {
-                if (! str($file)->startsWith(base_path('vendor' . DIRECTORY_SEPARATOR . 'composer/../../'))) {
+            ->filter(function (string $file, string $class) use ($applicationPath, $parentClass): bool {
+                if (
+                    (! is_path_within_directory($file, $applicationPath)) ||
+                    is_path_within_vendor_directory($file, $applicationPath)
+                ) {
                     return false;
                 }
 

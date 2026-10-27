@@ -3,6 +3,7 @@
 namespace Filament\Actions\Concerns;
 
 use Closure;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\View\ComponentAttributeBag;
 
 trait HasExtraModalWindowAttributes
@@ -21,6 +22,10 @@ trait HasExtraModalWindowAttributes
         // pass unsanitized user input as attribute names or values.
 
         if ($merge) {
+            if (($attributes instanceof Closure) && in_array($attributes, $this->extraModalWindowAttributes, strict: true)) {
+                return $this;
+            }
+
             $this->extraModalWindowAttributes[] = $attributes;
         } else {
             $this->extraModalWindowAttributes = [$attributes];
@@ -34,7 +39,7 @@ trait HasExtraModalWindowAttributes
      */
     public function getExtraModalWindowAttributes(): array
     {
-        $temporaryAttributeBag = new ComponentAttributeBag;
+        $temporaryAttributeBag = new FilamentComponentAttributeBag;
 
         foreach ($this->extraModalWindowAttributes as $extraModalWindowAttributes) {
             $temporaryAttributeBag = $temporaryAttributeBag->merge($this->evaluate($extraModalWindowAttributes), escape: false);
@@ -45,6 +50,6 @@ trait HasExtraModalWindowAttributes
 
     public function getExtraModalWindowAttributeBag(): ComponentAttributeBag
     {
-        return new ComponentAttributeBag($this->getExtraModalWindowAttributes());
+        return new FilamentComponentAttributeBag($this->getExtraModalWindowAttributes());
     }
 }

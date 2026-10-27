@@ -9,17 +9,21 @@ use Filament\Support\Concerns\CanWrap;
 use Filament\Support\Concerns\HasFontFamily;
 use Filament\Support\Concerns\HasLineClamp;
 use Filament\Support\Concerns\HasWeight;
+use Filament\Support\Contracts\HasIcon as HasIconInterface;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\FontFamily;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\IconSize;
 use Filament\Support\Enums\TextSize;
+use Filament\Support\Facades\FilamentColor;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Support\View\Components\BadgeComponent;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\View\Components\Columns\TextColumnComponent\ItemComponent;
 use Filament\Tables\View\Components\Columns\TextColumnComponent\ItemComponent\IconComponent;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Js;
@@ -106,10 +110,11 @@ class TextColumn extends Column implements HasEmbeddedView
         return $this;
     }
 
-    public function getSize(mixed $state): TextSize | string
+    public function getSize(mixed $state, ?Model $relatedRecord = null): TextSize | string
     {
         $size = $this->evaluate($this->size, [
             'state' => $state,
+            'relatedRecord' => $relatedRecord,
         ]);
 
         if (blank($size)) {
@@ -159,13 +164,124 @@ class TextColumn extends Column implements HasEmbeddedView
         return (bool) $this->evaluate($this->isLimitedListExpandable);
     }
 
+    public function hasBulleted(): bool
+    {
+        return $this->isBulleted !== false;
+    }
+
+    public function hasListWithLineBreaks(): bool
+    {
+        return $this->isListWithLineBreaks !== false;
+    }
+
+    public function hasSize(): bool
+    {
+        return $this->size !== null;
+    }
+
+    /**
+     * When adding a new property that affects the rendered cell HTML, add
+     * a `has*()` predicate to the trait that owns the property and reference
+     * it here.
+     */
+    protected function canRenderOptimized(mixed $state): bool
+    {
+        if (
+            is_array($state) ||
+            $state instanceof Collection ||
+            $state instanceof Htmlable ||
+            $state instanceof HasIconInterface
+        ) {
+            return false;
+        }
+
+        if (blank($state)) {
+            return false;
+        }
+
+        return ! $this->hasBulleted()
+            && ! $this->hasListWithLineBreaks()
+            && ! $this->hasIcon()
+            && ! $this->hasTooltip()
+            && ! $this->hasCopyable()
+            && ! $this->hasWeight()
+            && ! $this->hasFontFamily()
+            && ! $this->hasLineClamp()
+            && ! $this->hasSize()
+            && ! $this->hasDescription()
+            && ! $this->hasWrap()
+            && ! $this->hasExtraAttributes();
+    }
+
+    protected function toOptimizedHtml(mixed $state, ?Model $relatedRecord = null): string
+    {
+        $formattedState = e($this->formatState($state, $relatedRecord));
+        $url = $this->getUrl($state, $relatedRecord);
+
+        if (filled($url)) {
+            $formattedState = '<a ' . generate_href_html($url, $this->shouldOpenUrlInNewTab())->toHtml() . '>' . $formattedState . '</a>';
+        }
+
+        $isBadge = $this->isBadge();
+        $color = $this->getColor($state, $relatedRecord);
+
+        if ($isBadge) {
+            $badgeColor = filled($color) ? $color : 'primary';
+
+            if (is_array($badgeColor)) {
+                $badgeStyle = implode('; ', FilamentColor::getComponentCustomStyles(BadgeComponent::class, $badgeColor));
+                $formattedState = '<span class="fi-badge fi-size-sm fi-color" style="' . $badgeStyle . '">' . $formattedState . '</span>';
+            } else {
+                $badgeColorClasses = implode(' ', FilamentColor::getComponentClasses(BadgeComponent::class, $badgeColor));
+                $formattedState = '<span class="fi-badge fi-size-sm ' . $badgeColorClasses . '">' . $formattedState . '</span>';
+            }
+        }
+
+        $classString = $isBadge
+            ? 'fi-ta-text fi-ta-text-item fi-ta-text-has-badges'
+            : 'fi-ta-text fi-ta-text-item fi-size-sm';
+
+        $styleString = '';
+
+        if ((! $isBadge) && filled($color)) {
+            if (is_array($color)) {
+                $classString .= ' fi-color';
+                $styleString = ' style="' . implode('; ', FilamentColor::getComponentCustomStyles(ItemComponent::class, $color)) . '"';
+            } else {
+                $classString .= ' ' . implode(' ', FilamentColor::getComponentClasses(ItemComponent::class, $color));
+            }
+        }
+
+        if ($this->isInline()) {
+            $classString .= ' fi-inline';
+        }
+
+        if ($this->isNumeric() || $this->isMoney()) {
+            $classString .= ' fi-numeric';
+        }
+
+        $alignment = $this->getAlignment();
+
+        if ($alignment instanceof Alignment) {
+            $classString .= " fi-align-{$alignment->value}";
+        } elseif (is_string($alignment) && $alignment !== '') {
+            $classString .= ' ' . e($alignment);
+        }
+
+        return '<div class="' . $classString . '"' . $styleString . '>' . $formattedState . '</div>';
+    }
+
     public function toEmbeddedHtml(): string
     {
+        $state = $this->getState();
+
+        if ($this->canRenderOptimized($state)) {
+            return $this->toOptimizedHtml($state, Arr::first($this->getRelatedRecords()));
+        }
+
         $isBadge = $this->isBadge();
         $isListWithLineBreaks = $this->isListWithLineBreaks();
         $isLimitedListExpandable = $this->isLimitedListExpandable();
-
-        $state = $this->getState();
 
         if ($state instanceof Collection) {
             $state = $state->all();
@@ -175,6 +291,7 @@ class TextColumn extends Column implements HasEmbeddedView
             ->class([
                 'fi-ta-text',
                 'fi-inline' => $this->isInline(),
+                'fi-numeric' => $this->isNumeric() || $this->isMoney(),
             ]);
 
         $alignment = $this->getAlignment();
@@ -213,8 +330,8 @@ class TextColumn extends Column implements HasEmbeddedView
 
         $shouldOpenUrlInNewTab = $this->shouldOpenUrlInNewTab();
 
-        $formatState = function (mixed $stateItem) use ($shouldOpenUrlInNewTab): string {
-            $url = $this->getUrl($stateItem);
+        $formatState = function (mixed $stateItem, ?Model $relatedRecord, mixed $formattedState = null) use ($shouldOpenUrlInNewTab): string {
+            $url = $this->getUrl($stateItem, $relatedRecord);
 
             $item = '';
 
@@ -222,7 +339,7 @@ class TextColumn extends Column implements HasEmbeddedView
                 $item .= '<a ' . generate_href_html($url, $shouldOpenUrlInNewTab)->toHtml() . '>';
             }
 
-            $item .= e($this->formatState($stateItem));
+            $item .= e($formattedState ?? $this->formatState($stateItem, $relatedRecord));
 
             if (filled($url)) {
                 $item .= '</a>';
@@ -233,6 +350,7 @@ class TextColumn extends Column implements HasEmbeddedView
 
         /** @var array<mixed> $state */
         $state = Arr::wrap($state);
+        $relatedRecords = $this->getRelatedRecordsForState($state);
 
         $stateCount = count($state);
 
@@ -247,69 +365,85 @@ class TextColumn extends Column implements HasEmbeddedView
                 (! $isLimitedListExpandable)
             ) {
                 $state = array_slice($state, 0, $listLimit);
+                $relatedRecords = array_slice($relatedRecords, 0, $listLimit);
             }
         }
+
+        $isCollapsedList = false;
 
         if (($stateCount > 1) && (! $isListWithLineBreaks) && (! $isBadge)) {
             $state = [
                 implode(
                     ', ',
                     array_map(
-                        fn (mixed $stateItem): string => $formatState($stateItem),
+                        fn (mixed $stateItem, ?Model $relatedRecord): string => $formatState($stateItem, $relatedRecord),
                         $state,
+                        $relatedRecords,
                     ),
                 ),
             ];
+            $relatedRecords = [null];
 
             $stateCount = 1;
-            $formatState = fn (mixed $stateItem): string => $stateItem;
+            $formatState = fn (mixed $stateItem, ?Model $relatedRecord, mixed $formattedState = null): string => $stateItem;
+            $isCollapsedList = true;
         }
+
+        $lineClamp = $this->getLineClamp();
 
         $attributes = $attributes
             ->class([
                 'fi-ta-text-has-badges' => $isBadge,
+                'fi-ta-text-has-line-clamp' => $lineClamp && (! $isBadge),
                 'fi-wrapped' => $this->canWrap(),
             ]);
 
-        $lineClamp = $this->getLineClamp();
         $iconPosition = $this->getIconPosition();
         $isBulleted = $this->isBulleted();
 
-        $getStateItem = function (mixed $stateItem) use ($iconPosition, $isBadge, $lineClamp): array {
-            $color = $this->getColor($stateItem) ?? ($isBadge ? 'primary' : null);
-            $iconColor = $this->getIconColor($stateItem);
+        $getStateItemData = function (mixed $stateItem, ?Model $relatedRecord) use ($formatState, $iconPosition, $isBadge, $isCollapsedList, $lineClamp): array {
+            $formattedState = $isCollapsedList ? $stateItem : $this->formatState($stateItem, $relatedRecord);
+            $color = $this->getColor($stateItem, $relatedRecord) ?? ($isBadge ? 'primary' : null);
+            $iconColor = $this->getIconColor($stateItem, $relatedRecord);
 
-            $size = $this->getSize($stateItem);
+            $size = $this->getSize($stateItem, $relatedRecord);
 
-            $iconHtml = generate_icon_html($this->getIcon($stateItem), attributes: (new ComponentAttributeBag)
+            $iconHtml = generate_icon_html($this->getIcon($stateItem, $relatedRecord), attributes: (new FilamentComponentAttributeBag)
+                ->merge(['aria-hidden' => 'true'], escape: false)
                 ->color(IconComponent::class, $iconColor), size: match ($size) {
                     TextSize::Medium => IconSize::Medium,
                     TextSize::Large => IconSize::Large,
                     default => IconSize::Small,
                 })?->toHtml();
 
-            $isCopyable = $this->isCopyable($stateItem);
+            $isCopyable = $this->isCopyable($stateItem, $relatedRecord);
 
             if ($isCopyable) {
-                $copyableStateJs = Js::from($this->getCopyableState($stateItem) ?? $this->formatState($stateItem));
-                $copyMessageJs = Js::from($this->getCopyMessage($stateItem));
-                $copyMessageDurationJs = Js::from($this->getCopyMessageDuration($stateItem));
+                $copyableStateJs = Js::from($this->getCopyableState($stateItem, $relatedRecord) ?? $formattedState);
+                $copyMessageJs = Js::from($this->getCopyMessage($stateItem, $relatedRecord));
+                $copyMessageDurationJs = Js::from($this->getCopyMessageDuration($stateItem, $relatedRecord));
+                $copyLabelJs = Js::from(__('filament::components/copyable.label', [
+                    'label' => ($formattedState instanceof Htmlable)
+                        ? html_entity_decode(strip_tags($formattedState->toHtml()), ENT_QUOTES | ENT_HTML5)
+                        : ($isCollapsedList ? html_entity_decode(strip_tags($formattedState), ENT_QUOTES | ENT_HTML5) : $formattedState),
+                ]));
+                $copyFailureMessageJs = Js::from(__('filament::components/copyable.messages.failed'));
             }
 
-            $tooltip = $this->getTooltip($stateItem);
+            $tooltip = $this->getTooltip($stateItem, $relatedRecord);
 
             return [
-                'attributes' => (new ComponentAttributeBag)
+                'attributes' => (new FilamentComponentAttributeBag)
                     ->class([
                         'fi-ta-text-item',
-                        (($fontFamily = $this->getFontFamily($stateItem)) instanceof FontFamily) ? "fi-font-{$fontFamily->value}" : (is_string($fontFamily) ? $fontFamily : ''),
+                        (($fontFamily = $this->getFontFamily($stateItem, $relatedRecord)) instanceof FontFamily) ? "fi-font-{$fontFamily->value}" : (is_string($fontFamily) ? $fontFamily : ''),
                     ])
                     ->when(
                         ! $isBadge,
                         fn (ComponentAttributeBag $attributes) => $attributes
                             ->class([
                                 ($size instanceof TextSize) ? "fi-size-{$size->value}" : $size,
-                                (($weight = $this->getWeight($stateItem)) instanceof FontWeight) ? "fi-font-{$weight->value}" : (is_string($weight) ? $weight : ''),
+                                (($weight = $this->getWeight($stateItem, $relatedRecord)) instanceof FontWeight) ? "fi-font-{$weight->value}" : (is_string($weight) ? $weight : ''),
                             ])
                             ->when($lineClamp, fn (ComponentAttributeBag $attributes) => $attributes->style([
                                 "--line-clamp: {$lineClamp}",
@@ -317,15 +451,22 @@ class TextColumn extends Column implements HasEmbeddedView
                             ->color(ItemComponent::class, $color)
                     ),
                 'contentAttributes' => ($isBadge || $isCopyable || filled($tooltip))
-                    ? (new ComponentAttributeBag)
+                    ? (new FilamentComponentAttributeBag)
                         ->merge([
+                            'x-data' => $isCopyable ? 'filamentCopyable' : null,
+                            'x-bind' => $isCopyable ? 'bindings' : null,
+                            'x-bind:aria-label' => $isCopyable ? "isStandalone ? {$copyLabelJs} : null" : null,
                             'x-on:click.prevent.stop' => $isCopyable
                                 ? <<<JS
-                                window.navigator.clipboard.writeText({$copyableStateJs})
-                                \$tooltip({$copyMessageJs}, {
-                                    theme: \$store.theme,
-                                    timeout: {$copyMessageDurationJs},
-                                })
+                                if (isStandalone) {
+                                    copy({$copyableStateJs}, {$copyMessageJs}, {$copyMessageDurationJs}, {$copyFailureMessageJs})
+                                } else {
+                                    window.navigator.clipboard.writeText({$copyableStateJs})
+                                    \$tooltip({$copyMessageJs}, {
+                                        theme: \$store.theme,
+                                        timeout: {$copyMessageDurationJs},
+                                    })
+                                }
                                 JS
                                 : null,
                             'x-tooltip' => filled($tooltip)
@@ -351,6 +492,7 @@ class TextColumn extends Column implements HasEmbeddedView
                     : null,
                 'iconAfterHtml' => ($iconPosition === IconPosition::After) ? $iconHtml : '',
                 'iconBeforeHtml' => ($iconPosition === IconPosition::Before) ? $iconHtml : '',
+                'html' => $formatState($stateItem, $relatedRecord, $formattedState),
             ];
         };
 
@@ -365,12 +507,14 @@ class TextColumn extends Column implements HasEmbeddedView
             (! $lineClamp)
         ) {
             $stateItem = Arr::first($state);
+            $relatedRecord = Arr::first($relatedRecords);
             [
                 'attributes' => $stateItemAttributes,
                 'contentAttributes' => $stateItemContentAttributes,
+                'html' => $stateItemHtml,
                 'iconAfterHtml' => $stateItemIconAfterHtml,
                 'iconBeforeHtml' => $stateItemIconBeforeHtml,
-            ] = $getStateItem($stateItem);
+            ] = $getStateItemData($stateItem, $relatedRecord);
 
             ob_start(); ?>
 
@@ -382,7 +526,7 @@ class TextColumn extends Column implements HasEmbeddedView
                 <?php } ?>
 
                 <?= $stateItemIconBeforeHtml ?>
-                <?= $formatState($stateItem) ?>
+                <?= $stateItemHtml ?>
                 <?= $stateItemIconAfterHtml ?>
 
                 <?php if ($stateItemContentAttributes) { ?>
@@ -423,12 +567,14 @@ class TextColumn extends Column implements HasEmbeddedView
                 <?php if (($stateCount === 1) && (! $isBulleted)) { ?>
                     <?php
                         $stateItem = Arr::first($state);
+                    $relatedRecord = Arr::first($relatedRecords);
                     [
                         'attributes' => $stateItemAttributes,
                         'contentAttributes' => $stateItemContentAttributes,
+                        'html' => $stateItemHtml,
                         'iconAfterHtml' => $stateItemIconAfterHtml,
                         'iconBeforeHtml' => $stateItemIconBeforeHtml,
-                    ] = $getStateItem($stateItem);
+                    ] = $getStateItemData($stateItem, $relatedRecord);
                     ?>
 
                     <p <?= $stateItemAttributes->toHtml() ?>>
@@ -437,7 +583,7 @@ class TextColumn extends Column implements HasEmbeddedView
                         <?php } ?>
 
                         <?= $stateItemIconBeforeHtml ?>
-                        <?= $formatState($stateItem) ?>
+                        <?= $stateItemHtml ?>
                         <?= $stateItemIconAfterHtml ?>
 
                         <?php if ($stateItemContentAttributes) { ?>
@@ -448,13 +594,14 @@ class TextColumn extends Column implements HasEmbeddedView
                     <ul>
                         <?php $stateIteration = 1; ?>
 
-                        <?php foreach ($state as $stateItem) { ?>
+                        <?php foreach ($state as $stateItemIndex => $stateItem) { ?>
                             <?php [
                                 'attributes' => $stateItemAttributes,
                                 'contentAttributes' => $stateItemContentAttributes,
+                                'html' => $stateItemHtml,
                                 'iconAfterHtml' => $stateItemIconAfterHtml,
                                 'iconBeforeHtml' => $stateItemIconBeforeHtml,
-                            ] = $getStateItem($stateItem); ?>
+                            ] = $getStateItemData($stateItem, $relatedRecords[$stateItemIndex] ?? null); ?>
 
                             <li
                                 <?php if ($stateIteration > $listLimit) { ?>
@@ -469,7 +616,7 @@ class TextColumn extends Column implements HasEmbeddedView
                                 <?php } ?>
 
                                 <?= $stateItemIconBeforeHtml ?>
-                                <?= $formatState($stateItem) ?>
+                                <?= $stateItemHtml ?>
                                 <?= $stateItemIconAfterHtml ?>
 
                                 <?php if ($stateItemContentAttributes) { ?>
@@ -484,9 +631,18 @@ class TextColumn extends Column implements HasEmbeddedView
 
                 <?php if ($stateOverListLimitCount) { ?>
                     <div class="fi-ta-text-list-limited-message">
+                        <?php
+                            // These stay `<div role="button">` — not a real `<button>`, and deliberately without
+                            // `tabindex`. When the column has a record URL or action, the table wraps the whole cell
+                            // content in an `<a>` / `<button>` (see the record-content wrapper in the tables view), and
+                            // a `<button>` — or any element with `tabindex` — is interactive content that is invalid
+                            // nested inside a link/button. `role="button"` + `aria-expanded` expose the control's
+                            // purpose and state to assistive tech without introducing that invalid nesting.
+                    ?>
                         <?php if ($isLimitedListExpandable) { ?>
                             <div
                                 role="button"
+                                x-bind:aria-expanded="(! isLimited).toString()"
                                 x-on:click.prevent.stop="isLimited = false"
                                 x-show="isLimited"
                                 class="fi-link fi-size-xs"
@@ -496,6 +652,7 @@ class TextColumn extends Column implements HasEmbeddedView
 
                             <div
                                 role="button"
+                                x-bind:aria-expanded="(! isLimited).toString()"
                                 x-on:click.prevent.stop="isLimited = true"
                                 x-cloak
                                 x-show="! isLimited"
@@ -522,13 +679,14 @@ class TextColumn extends Column implements HasEmbeddedView
         ob_start(); ?>
 
         <ul <?= $attributes->toHtml() ?>>
-            <?php foreach ($state as $stateItem) { ?>
+            <?php foreach ($state as $stateItemIndex => $stateItem) { ?>
                 <?php [
                     'attributes' => $stateItemAttributes,
                     'contentAttributes' => $stateItemContentAttributes,
+                    'html' => $stateItemHtml,
                     'iconAfterHtml' => $stateItemIconAfterHtml,
                     'iconBeforeHtml' => $stateItemIconBeforeHtml,
-                ] = $getStateItem($stateItem); ?>
+                ] = $getStateItemData($stateItem, $relatedRecords[$stateItemIndex] ?? null); ?>
 
                 <li <?= $stateItemAttributes->toHtml() ?>>
                     <?php if ($stateItemContentAttributes) { ?>
@@ -536,7 +694,7 @@ class TextColumn extends Column implements HasEmbeddedView
                     <?php } ?>
 
                     <?= $stateItemIconBeforeHtml ?>
-                    <?= $formatState($stateItem) ?>
+                    <?= $stateItemHtml ?>
                     <?= $stateItemIconAfterHtml ?>
 
                     <?php if ($stateItemContentAttributes) { ?>

@@ -4,6 +4,12 @@ return [
 
     'builder' => [
 
+        'reordering' => [
+            'item' => 'Blok',
+            'position' => ':label, pozycja :position z :count',
+            'moved' => ':label przeniesiono na pozycję :position z :count',
+        ],
+
         'actions' => [
 
             'clone' => [
@@ -104,9 +110,19 @@ return [
 
         ],
 
+        'block_picker' => [
+
+            'no_search_results_message' => 'Żadne bloki nie pasują do Twojego wyszukiwania.',
+
+            'search_prompt' => 'Szukaj bloków',
+
+        ],
+
     ],
 
     'checkbox_list' => [
+
+        'required_description' => 'Wybierz przynajmniej jedną opcję.',
 
         'actions' => [
 
@@ -122,9 +138,55 @@ return [
 
     ],
 
+    'color_picker' => [
+
+        'panel_label' => 'Wybór koloru',
+
+    ],
+
+    'date_time_picker' => [
+
+        'month_select' => [
+            'label' => 'Miesiąc',
+        ],
+
+        'year_input' => [
+            'label' => 'Rok',
+        ],
+
+        'hour_input' => [
+            'label' => 'Godzina',
+        ],
+
+        'minute_input' => [
+            'label' => 'Minuta',
+        ],
+
+        'second_input' => [
+            'label' => 'Sekunda',
+        ],
+
+    ],
+
     'file_upload' => [
 
+        'placeholder' => 'Brak przesłanych plików',
+
+        'actions' => [
+
+            'download' => [
+                'label' => 'Pobierz',
+            ],
+
+            'open' => [
+                'label' => 'Otwórz w nowej karcie',
+            ],
+
+        ],
+
         'editor' => [
+
+            'label' => 'Edytor obrazów',
 
             'actions' => [
 
@@ -262,8 +324,28 @@ return [
                 'label' => 'Usuń wiersz',
             ],
 
+            'move_down' => [
+                'label' => 'Przenieś w dół',
+            ],
+
+            'move_up' => [
+                'label' => 'Przenieś w górę',
+            ],
+
             'reorder' => [
                 'label' => 'Przenieś wiersz',
+            ],
+
+        ],
+
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Akcje',
+            ],
+
+            'reorder' => [
+                'label' => 'Zmień kolejność',
             ],
 
         ],
@@ -278,6 +360,12 @@ return [
                 'label' => 'Wartość',
             ],
 
+        ],
+
+        'reordering' => [
+            'row' => 'Wiersz',
+            'position' => ':label, pozycja :position z :count',
+            'moved' => ':label przeniesiono na pozycję :position z :count',
         ],
 
     ],
@@ -338,6 +426,24 @@ return [
     ],
 
     'repeater' => [
+
+        'reordering' => [
+            'item' => 'Element',
+            'position' => ':label, pozycja :position z :count',
+            'moved' => ':label przeniesiono na pozycję :position z :count',
+        ],
+
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Akcje',
+            ],
+
+            'reorder' => [
+                'label' => 'Zmień kolejność',
+            ],
+
+        ],
 
         'actions' => [
 
@@ -425,6 +531,10 @@ return [
 
                 ],
 
+            ],
+
+            'close_panel' => [
+                'label' => 'Zamknij panel',
             ],
 
             'custom_block' => [
@@ -591,6 +701,28 @@ return [
 
         ],
 
+        'custom_blocks' => [
+
+            'actions' => [
+
+                'delete' => [
+                    'label' => 'Usuń blok',
+                ],
+
+                'edit' => [
+                    'label' => 'Edytuj blok',
+                ],
+
+            ],
+
+            'no_search_results_message' => 'Żadne bloki nie pasują do Twojego wyszukiwania.',
+
+            'search_label' => 'Szukaj bloków',
+
+            'search_prompt' => 'Szukaj bloków',
+
+        ],
+
         'file_attachments_accepted_file_types_message' => 'Przesyłane pliki muszą być typu: :values.',
 
         'file_attachments_max_size_message' => 'Przesyłane pliki nie mogą być większe niż :max kilobajtów.',
@@ -602,6 +734,10 @@ return [
             'no_search_results_message' => 'Brak wyników wyszukiwania.',
             'search_prompt' => 'Zacznij pisać aby wyszukać...',
             'searching_message' => 'Wyszukiwanie...',
+        ],
+
+        'toolbar' => [
+            'label' => 'Pasek narzędzi edytora',
         ],
 
         'tools' => [
@@ -664,6 +800,10 @@ return [
 
         'actions' => [
 
+            'clear' => [
+                'label' => 'Wyczyść wybór',
+            ],
+
             'create_option' => [
 
                 'label' => 'Utwórz',
@@ -708,12 +848,18 @@ return [
 
             ],
 
+            'remove_option' => [
+                'label' => 'Usuń :label',
+            ],
+
         ],
 
         'boolean' => [
             'true' => 'Tak',
             'false' => 'Nie',
         ],
+
+        'error_message' => 'Opcje nie mogły zostać załadowane. Spróbuj ponownie.',
 
         'loading_message' => 'Wczytywanie...',
 
@@ -725,7 +871,11 @@ return [
 
         'placeholder' => 'Wybierz z listy',
 
+        'required_description' => 'Wybierz opcję.',
+
         'searching_message' => 'Szukanie...',
+
+        'search_label' => 'Szukaj',
 
         'search_prompt' => 'Zacznij pisać aby wyszukać...',
 
@@ -742,6 +892,10 @@ return [
         ],
 
         'placeholder' => 'Nowy tag',
+
+        'tag_added' => 'Dodano: :tag',
+
+        'tag_removed' => 'Usunięto: :tag',
 
     ],
 
@@ -767,6 +921,8 @@ return [
     ],
 
     'toggle_buttons' => [
+
+        'required_description' => 'Wybierz przynajmniej jedną opcję.',
 
         'boolean' => [
             'true' => 'Tak',

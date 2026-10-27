@@ -1,5 +1,9 @@
 @php
     use Filament\Support\Enums\Width;
+    use Filament\Support\Facades\FilamentView;
+    use Filament\Support\Icons\Heroicon;
+    use Filament\View\PanelsIconAlias;
+    use Filament\View\PanelsRenderHook;
 
     $livewire ??= null;
 
@@ -26,16 +30,26 @@
         'fi-body-has-top-navigation' => $hasTopNavigation,
     ])
 >
+    <a
+        x-data="{}"
+        x-bind:inert="$store.sidebar.isOpenMobile"
+        href="#fi-main-content"
+        class="fi-skip-link fi-sr-only"
+    >
+        {{ __('filament-panels::layout.skip_to_content.label') }}
+    </a>
+
     @if ($hasTopbar)
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::TOPBAR_BEFORE, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::TOPBAR_BEFORE, scopes: $renderHookScopes) }}
 
         @livewire(filament()->getTopbarLivewireComponent())
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::TOPBAR_AFTER, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::TOPBAR_AFTER, scopes: $renderHookScopes) }}
     @elseif ($hasNavigation)
         <div
+            x-data="{}"
+            x-bind:inert="$store.sidebar.isOpenMobile"
             @if ($isSidebarFullyCollapsibleOnDesktop)
-                x-data="{}"
                 x-bind:class="{ 'lg:fi-hidden': $store.sidebar.isOpen }"
             @endif
             @class([
@@ -45,20 +59,22 @@
         >
             <x-filament::icon-button
                 color="gray"
-                :icon="\Filament\Support\Icons\Heroicon::OutlinedBars3"
-                :icon-alias="\Filament\View\PanelsIconAlias::SIDEBAR_EXPAND_BUTTON"
+                :icon="Heroicon::OutlinedBars3"
+                :icon-alias="PanelsIconAlias::SIDEBAR_EXPAND_BUTTON"
                 icon-size="lg"
                 :label="__('filament-panels::layout.actions.sidebar.expand.label')"
                 x-cloak
                 x-data="{}"
-                x-on:click="$store.sidebar.open()"
+                aria-controls="fi-main-sidebar"
+                x-bind:aria-expanded="$store.sidebar.isOpen"
+                x-on:click="$store.sidebar.open($event.currentTarget)"
                 class="fi-layout-sidebar-toggle-btn"
             />
         </div>
     @endif
 
     <div class="fi-layout">
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::LAYOUT_START, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::LAYOUT_START, scopes: $renderHookScopes) }}
 
         @if ($hasNavigation)
             <div
@@ -74,46 +90,47 @@
         @endif
 
         <div
+            x-data="filamentSidebarBackground"
+            x-bind:inert="$store.sidebar.isOpenMobile && ! hasOpenModal"
             @if ($isSidebarCollapsibleOnDesktop)
-                x-data="{}"
                 x-bind:class="{
                     'fi-main-ctn-sidebar-open': $store.sidebar.isOpen,
                 }"
                 x-bind:style="'display: flex; opacity:1;'"
                 {{-- Mimics `x-cloak`, as using `x-cloak` causes visual issues with chart widgets --}}
             @elseif ($isSidebarFullyCollapsibleOnDesktop)
-                x-data="{}"
                 x-bind:class="{
                     'fi-main-ctn-sidebar-open': $store.sidebar.isOpen,
                 }"
                 x-bind:style="'display: flex; opacity:1;'"
                 {{-- Mimics `x-cloak`, as using `x-cloak` causes visual issues with chart widgets --}}
             @elseif (! ($isSidebarCollapsibleOnDesktop || $isSidebarFullyCollapsibleOnDesktop || $hasTopNavigation || (! $hasNavigation)))
-                x-data="{}"
                 x-bind:style="'display: flex; opacity:1;'" {{-- Mimics `x-cloak`, as using `x-cloak` causes visual issues with chart widgets --}}
             @endif
             class="fi-main-ctn"
         >
-            {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::CONTENT_BEFORE, scopes: $renderHookScopes) }}
+            {{ FilamentView::renderHook(PanelsRenderHook::CONTENT_BEFORE, scopes: $renderHookScopes) }}
 
             <main
+                id="fi-main-content"
+                tabindex="-1"
                 @class([
                     'fi-main',
                     ($maxContentWidth instanceof Width) ? "fi-width-{$maxContentWidth->value}" : $maxContentWidth,
                 ])
             >
-                {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::CONTENT_START, scopes: $renderHookScopes) }}
+                {{ FilamentView::renderHook(PanelsRenderHook::CONTENT_START, scopes: $renderHookScopes) }}
 
                 {{ $slot }}
 
-                {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::CONTENT_END, scopes: $renderHookScopes) }}
+                {{ FilamentView::renderHook(PanelsRenderHook::CONTENT_END, scopes: $renderHookScopes) }}
             </main>
 
-            {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::CONTENT_AFTER, scopes: $renderHookScopes) }}
+            {{ FilamentView::renderHook(PanelsRenderHook::CONTENT_AFTER, scopes: $renderHookScopes) }}
 
-            {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::FOOTER, scopes: $renderHookScopes) }}
+            {{ FilamentView::renderHook(PanelsRenderHook::FOOTER, scopes: $renderHookScopes) }}
         </div>
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::LAYOUT_END, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::LAYOUT_END, scopes: $renderHookScopes) }}
     </div>
 </x-filament-panels::layout.base>

@@ -42,17 +42,15 @@ class RichEditorStateCast implements StateCast
             });
         }
 
-        if ($this->richEditor->getCustomBlocks()) {
-            $editor->descendants(function (object &$node): void {
-                if ($node->type !== 'customBlock') {
-                    return;
-                }
+        $editor->descendants(function (object &$node): void {
+            if ($node->type !== 'customBlock') {
+                return;
+            }
 
-                unset($node->attrs->label);
-                unset($node->attrs->preview);
-                unset($node->attrs->shouldApplyProseStylingToPreview);
-            });
-        }
+            unset($node->attrs->label);
+            unset($node->attrs->preview);
+            unset($node->attrs->shouldApplyProseStylingToPreview);
+        });
 
         return $editor->{$this->richEditor->isJson() ? 'getDocument' : 'getHtml'}();
     }
@@ -97,57 +95,35 @@ class RichEditorStateCast implements StateCast
                 $node->attrs->src = $this->richEditor->getFileAttachmentUrl($node->attrs->id) ?? $this->richEditor->getFileAttachmentUrlFromAnotherRecord($node->attrs->id) ?? $node->attrs->src ?? null;
             });
 
-        if ($this->richEditor->getCustomBlocks()) {
-            $editor->descendants(function (object &$node): void {
-                if ($node->type !== 'customBlock') {
-                    return;
-                }
+        $editor->descendants(function (object &$node): void {
+            if ($node->type !== 'customBlock') {
+                return;
+            }
 
-                $block = $this->richEditor->getCustomBlock($node->attrs->id);
+            unset($node->attrs->label);
+            unset($node->attrs->preview);
+            unset($node->attrs->shouldApplyProseStylingToPreview);
 
-                if (blank($block)) {
-                    return;
-                }
+            if (blank($node->attrs->id ?? null)) {
+                return;
+            }
 
-                $nodeConfig = json_decode(json_encode($node->attrs->config ?? []), associative: true);
+            $block = $this->richEditor->getCustomBlock($node->attrs->id);
 
-                $node->attrs->label = $block::getPreviewLabel($nodeConfig);
-                $node->attrs->preview = base64_encode($block::toPreviewHtml($nodeConfig));
-                $node->attrs->shouldApplyProseStylingToPreview = $block::shouldApplyProseStylingToPreview($nodeConfig);
-            });
-        }
+            if (blank($block)) {
+                return;
+            }
+
+            $nodeConfig = json_decode(json_encode($node->attrs->config ?? []), associative: true);
+
+            $node->attrs->label = $block::getPreviewLabel($nodeConfig);
+            $node->attrs->preview = base64_encode($block::toPreviewHtml($nodeConfig));
+            $node->attrs->shouldApplyProseStylingToPreview = $block::shouldApplyProseStylingToPreview($nodeConfig);
+        });
 
         $this->hydrateMentionLabels($editor);
-        $this->normalizeListItemContent($editor);
 
         return $editor->getDocument();
-    }
-
-    /**
-     * https://github.com/filamentphp/filament/issues/19529
-     */
-    protected function normalizeListItemContent(Editor $editor): void
-    {
-        $editor->descendants(function (object &$node): void {
-            if ($node->type !== 'listItem') {
-                return;
-            }
-
-            if (! isset($node->content) || ! is_array($node->content)) {
-                return;
-            }
-
-            $firstChild = $node->content[0] ?? null;
-
-            if (! $firstChild || $firstChild->type !== 'text') {
-                return;
-            }
-
-            $node->content = [(object) [
-                'type' => 'paragraph',
-                'content' => $node->content,
-            ]];
-        });
     }
 
     protected function hydrateMentionLabels(Editor $editor): void

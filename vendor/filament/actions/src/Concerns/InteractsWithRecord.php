@@ -2,9 +2,11 @@
 
 namespace Filament\Actions\Concerns;
 
+use BackedEnum;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Support\ArrayRecord;
+use Filament\Support\Contracts\HasLabel;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use LogicException;
@@ -40,6 +42,8 @@ trait InteractsWithRecord
     public function record(Model | string | array | Closure | null $record): static
     {
         $this->record = $record;
+
+        $this->clearVisibilityCache();
 
         return $this;
     }
@@ -170,6 +174,24 @@ trait InteractsWithRecord
             }
         }
 
+        return $this->getDefaultRecordTitle();
+    }
+
+    protected function formatRecordTitle(mixed $title): ?string
+    {
+        if ($title instanceof HasLabel) {
+            $title = $title->getLabel();
+        } elseif ($title instanceof BackedEnum) {
+            $title = $title->value;
+        }
+
+        $title = (string) ($title ?? $this->getTable()?->getModelLabel());
+
+        return filled($title) ? $title : $this->getDefaultRecordTitle();
+    }
+
+    protected function getDefaultRecordTitle(): ?string
+    {
         if ($this instanceof Action && filled($title = $this->getHasActionsLivewire()?->getDefaultActionRecordTitle($this))) {
             return $title;
         }

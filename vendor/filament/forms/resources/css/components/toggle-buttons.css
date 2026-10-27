@@ -1,6 +1,10 @@
 .fi-fo-toggle-buttons {
     &.fi-btn-group {
-        @apply w-max;
+        @apply w-max max-w-full;
+
+        &.fi-width-full {
+            @apply w-full;
+        }
     }
 
     &:not(.fi-btn-group) {
@@ -8,6 +12,12 @@
 
         &.fi-inline {
             @apply flex flex-wrap;
+
+            &.fi-width-full {
+                & .fi-fo-toggle-buttons-btn-ctn {
+                    @apply grow;
+                }
+            }
         }
 
         &:not(.fi-inline).fi-grid-direction-col {
@@ -17,6 +27,10 @@
                 @apply break-inside-avoid pt-3;
             }
         }
+
+        &.fi-width-full .fi-fo-toggle-buttons-btn-ctn .fi-btn {
+            @apply w-full;
+        }
     }
 
     & .fi-fo-toggle-buttons-input {
@@ -25,6 +39,8 @@
 }
 
 .fi-fo-toggle-buttons-wrp {
+    @apply outline-none;
+
     &.fi-fo-field-has-inline-label {
         & .fi-fo-field-label-col {
             @apply sm:pt-1.5;

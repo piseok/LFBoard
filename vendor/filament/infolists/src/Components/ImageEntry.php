@@ -7,8 +7,10 @@ use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\CanWrap;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\TextSize;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -42,6 +44,8 @@ class ImageEntry extends Entry implements HasEmbeddedView
      * @var array<mixed> | Closure
      */
     protected array | Closure $extraImgAttributes = [];
+
+    protected string | Closure | null $alt = null;
 
     protected string | Closure | null $defaultImageUrl = null;
 
@@ -141,14 +145,20 @@ class ImageEntry extends Entry implements HasEmbeddedView
         return $this;
     }
 
-    public function getDisk(): Filesystem
+    public function getDisk(mixed $state = null, ?Model $relatedRecord = null): Filesystem
     {
-        return Storage::disk($this->getDiskName());
+        return Storage::disk(func_num_args()
+            ? $this->getDiskName($state, $relatedRecord)
+            : $this->getDiskName());
     }
 
-    public function getDiskName(): string
+    public function getDiskName(mixed $state = null, ?Model $relatedRecord = null): string
     {
-        $name = $this->evaluate($this->diskName);
+        $hasState = func_num_args() > 0;
+        $name = $this->evaluate(
+            $this->diskName,
+            $this->getStateEvaluationParameters($state, $relatedRecord, $hasState),
+        );
 
         if (filled($name)) {
             return $name;
@@ -158,7 +168,7 @@ class ImageEntry extends Entry implements HasEmbeddedView
 
         if (
             ($defaultName === 'public')
-            && ($this->getCustomVisibility() === 'private')
+            && (($hasState ? $this->getCustomVisibility($state, $relatedRecord) : $this->getCustomVisibility()) === 'private')
         ) {
             return 'local';
         }
@@ -196,16 +206,33 @@ class ImageEntry extends Entry implements HasEmbeddedView
         return $this;
     }
 
-    public function getImageUrl(?string $state = null): ?string
+    public function alt(string | Closure | null $alt): static
+    {
+        $this->alt = $alt;
+
+        return $this;
+    }
+
+    public function getAlt(mixed $state = null, ?Model $relatedRecord = null): ?string
+    {
+        return $this->evaluate($this->alt, [
+            'state' => $state,
+            'relatedRecord' => $relatedRecord,
+        ]);
+    }
+
+    public function getImageUrl(?string $state = null, ?Model $relatedRecord = null): ?string
     {
         if ((filter_var($state, FILTER_VALIDATE_URL) !== false) || str($state)->startsWith('data:')) {
             return $state;
         }
 
-        /** @var FilesystemAdapter $storage */
-        $storage = $this->getDisk();
+        $hasState = func_num_args() > 0;
 
-        if ($this->shouldCheckFileExistence()) {
+        /** @var FilesystemAdapter $storage */
+        $storage = $hasState ? $this->getDisk($state, $relatedRecord) : $this->getDisk();
+
+        if ($hasState ? $this->shouldCheckFileExistence($state, $relatedRecord) : $this->shouldCheckFileExistence()) {
             try {
                 if (! $storage->exists($state)) {
                     return null;
@@ -215,7 +242,7 @@ class ImageEntry extends Entry implements HasEmbeddedView
             }
         }
 
-        if ($this->getVisibility() === 'private') {
+        if (($hasState ? $this->getVisibility($state, $relatedRecord) : $this->getVisibility()) === 'private') {
             try {
                 return $storage->temporaryUrl(
                     $state,
@@ -229,25 +256,38 @@ class ImageEntry extends Entry implements HasEmbeddedView
         return $storage->url($state);
     }
 
-    public function getDefaultImageUrl(): ?string
+    public function getDefaultImageUrl(mixed $state = null, ?Model $relatedRecord = null): ?string
     {
-        return $this->evaluate($this->defaultImageUrl);
+        return $this->evaluate(
+            $this->defaultImageUrl,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
     }
 
-    public function getVisibility(): string
+    public function getVisibility(mixed $state = null, ?Model $relatedRecord = null): string
     {
-        $visibility = $this->getCustomVisibility();
+        $hasState = func_num_args() > 0;
+        $visibility = $hasState
+            ? $this->getCustomVisibility($state, $relatedRecord)
+            : $this->getCustomVisibility();
 
         if (filled($visibility)) {
             return $visibility;
         }
 
-        return ($this->getDiskName() === 'public') ? 'public' : 'private';
+        $diskName = $hasState
+            ? $this->getDiskName($state, $relatedRecord)
+            : $this->getDiskName();
+
+        return ($diskName === 'public') ? 'public' : 'private';
     }
 
-    public function getCustomVisibility(): ?string
+    public function getCustomVisibility(mixed $state = null, ?Model $relatedRecord = null): ?string
     {
-        return $this->evaluate($this->visibility);
+        return $this->evaluate(
+            $this->visibility,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
     }
 
     public function getImageWidth(): ?string
@@ -299,14 +339,19 @@ class ImageEntry extends Entry implements HasEmbeddedView
     /**
      * @return array<mixed>
      */
-    public function getExtraImgAttributes(): array
+    public function getExtraImgAttributes(mixed $state = null, ?Model $relatedRecord = null): array
     {
-        return $this->evaluate($this->extraImgAttributes);
+        return $this->evaluate(
+            $this->extraImgAttributes,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
     }
 
-    public function getExtraImgAttributeBag(): ComponentAttributeBag
+    public function getExtraImgAttributeBag(mixed $state = null, ?Model $relatedRecord = null): ComponentAttributeBag
     {
-        return new ComponentAttributeBag($this->getExtraImgAttributes());
+        return new FilamentComponentAttributeBag(func_num_args()
+            ? $this->getExtraImgAttributes($state, $relatedRecord)
+            : $this->getExtraImgAttributes());
     }
 
     public function stacked(bool | Closure $condition = true): static
@@ -333,7 +378,7 @@ class ImageEntry extends Entry implements HasEmbeddedView
         return $this->evaluate($this->overlap);
     }
 
-    public function ring(string | Closure | null $ring): static
+    public function ring(int | string | Closure | null $ring): static
     {
         $this->ring = $ring;
 
@@ -412,9 +457,12 @@ class ImageEntry extends Entry implements HasEmbeddedView
         return $this;
     }
 
-    public function shouldCheckFileExistence(): bool
+    public function shouldCheckFileExistence(mixed $state = null, ?Model $relatedRecord = null): bool
     {
-        return (bool) $this->evaluate($this->shouldCheckFileExistence);
+        return (bool) $this->evaluate(
+            $this->shouldCheckFileExistence,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
     }
 
     public function toEmbeddedHtml(): string
@@ -430,10 +478,14 @@ class ImageEntry extends Entry implements HasEmbeddedView
                 'fi-in-image',
             ]);
 
-        $defaultImageUrl = $this->getDefaultImageUrl();
+        $defaultImageUrl = null;
 
-        if (blank($state) && filled($defaultImageUrl)) {
-            $state = [null];
+        if (blank($state)) {
+            $defaultImageUrl = $this->getDefaultImageUrl($state, $this->getRelatedRecord());
+
+            if (filled($defaultImageUrl)) {
+                $state = [null];
+            }
         }
 
         if (blank($state)) {
@@ -465,6 +517,7 @@ class ImageEntry extends Entry implements HasEmbeddedView
         }
 
         $state = Arr::wrap($state);
+        $relatedRecords = $this->getRelatedRecordsForState($state);
         $stateCount = count($state);
 
         $limit = $this->getLimit() ?? $stateCount;
@@ -475,6 +528,7 @@ class ImageEntry extends Entry implements HasEmbeddedView
 
         if ($stateOverLimitCount) {
             $state = array_slice($state, 0, $limit);
+            $relatedRecords = array_slice($relatedRecords, 0, $limit);
         }
 
         $alignment = $this->getAlignment();
@@ -498,11 +552,14 @@ class ImageEntry extends Entry implements HasEmbeddedView
 
         $shouldOpenUrlInNewTab = $this->shouldOpenUrlInNewTab();
 
-        $formatState = function (mixed $stateItem) use ($defaultImageUrl, $width, $height, $shouldOpenUrlInNewTab): string {
-            $item = '<img ' . $this->getExtraImgAttributeBag()
+        $formatState = function (mixed $stateItem, ?Model $relatedRecord) use ($defaultImageUrl, $width, $height, $shouldOpenUrlInNewTab): string {
+            $stateItemDefaultImageUrl = $defaultImageUrl ?? $this->getDefaultImageUrl($stateItem, $relatedRecord);
+
+            $item = '<img ' . $this->getExtraImgAttributeBag($stateItem, $relatedRecord)
                 ->merge([
-                    'src' => e(filled($stateItem) ? ($this->getImageUrl($stateItem) ?? $defaultImageUrl) : $defaultImageUrl),
-                    'x-tooltip' => filled($tooltip = $this->getTooltip($stateItem))
+                    'alt' => e($this->getAlt($stateItem, $relatedRecord) ?? ''),
+                    'src' => e(filled($stateItem) ? ($this->getImageUrl($stateItem, $relatedRecord) ?? $stateItemDefaultImageUrl) : $stateItemDefaultImageUrl),
+                    'x-tooltip' => filled($tooltip = $this->getTooltip($stateItem, $relatedRecord))
                         ? '{
                                 content: ' . Js::from($tooltip) . ',
                                 theme: $store.theme,
@@ -517,7 +574,7 @@ class ImageEntry extends Entry implements HasEmbeddedView
                 ->toHtml()
                 . ' />';
 
-            if (filled($url = $this->getUrl($stateItem))) {
+            if (filled($url = $this->getUrl($stateItem, $relatedRecord))) {
                 $item = '<a ' . generate_href_html($url, $shouldOpenUrlInNewTab)->toHtml() . '>' . $item . '</a>';
             }
 
@@ -527,12 +584,12 @@ class ImageEntry extends Entry implements HasEmbeddedView
         ob_start(); ?>
 
         <div <?= $attributes->toHtml() ?>>
-            <?php foreach ($state as $stateItem) { ?>
-                <?= $formatState($stateItem) ?>
+            <?php foreach ($state as $stateItemIndex => $stateItem) { ?>
+                <?= $formatState($stateItem, $relatedRecords[$stateItemIndex] ?? null) ?>
             <?php } ?>
 
             <?php if ($hasLimitedRemainingText) { ?>
-                <div <?= (new ComponentAttributeBag)
+                <div <?= (new FilamentComponentAttributeBag)
                 ->class([
                     'fi-in-image-limited-remaining-text',
                     (($limitedRemainingTextSize instanceof TextSize) ? "fi-size-{$limitedRemainingTextSize->value}" : $limitedRemainingTextSize) => $limitedRemainingTextSize,

@@ -1,4 +1,8 @@
 import noUiSlider from 'nouislider'
+import {
+    observeFieldAccessibility,
+    setFieldAccessibilityAttributes,
+} from '../utilities/field-accessibility.js'
 
 export default function sliderFormComponent({
     arePipsStepped,
@@ -27,6 +31,7 @@ export default function sliderFormComponent({
         state,
 
         slider: null,
+        accessibilityObserver: null,
 
         init() {
             this.slider = noUiSlider.create(this.$el, {
@@ -64,6 +69,30 @@ export default function sliderFormComponent({
                 tooltips,
             })
 
+            if (this.$el.id) {
+                // `noUiSlider` handles are focusable `role="slider"` elements, but it does not
+                // give them an accessible name, so they inherit the field's label element.
+                this.$el
+                    .querySelectorAll('.noUi-handle')
+                    .forEach((handle) =>
+                        handle.setAttribute(
+                            'aria-labelledby',
+                            `${this.$el.id}-label`,
+                        ),
+                    )
+            }
+
+            const handles = this.$el.querySelectorAll('.noUi-handle')
+
+            this.accessibilityObserver = observeFieldAccessibility(
+                this.$el,
+                (attributes) => {
+                    handles.forEach((handle) =>
+                        setFieldAccessibilityAttributes(handle, attributes),
+                    )
+                },
+            )
+
             if (isDisabled) {
                 this.slider.disable()
             }
@@ -78,6 +107,7 @@ export default function sliderFormComponent({
         },
 
         destroy() {
+            this.accessibilityObserver?.disconnect()
             this.slider.destroy()
             this.slider = null
         },

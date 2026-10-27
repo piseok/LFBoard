@@ -33,6 +33,8 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 use Livewire\Attributes\Locked;
 use SensitiveParameter;
 
+use function Filament\Support\encode_key_segments;
+
 /**
  * @property-read Schema $form
  */
@@ -147,7 +149,8 @@ class ResetPassword extends SimplePage
             return false;
         }
 
-        $rateLimitingKey = 'filament-reset-password:' . sha1($email);
+        $passwordBroker = Filament::getAuthPasswordBroker() ?? Password::getDefaultDriver();
+        $rateLimitingKey = 'filament:auth:reset_password:rate_limit:' . hash('sha256', encode_key_segments($passwordBroker, $email));
 
         if (RateLimiter::tooManyAttempts($rateLimitingKey, maxAttempts: 2)) {
             $this->getRateLimitedNotification(new TooManyRequestsException(

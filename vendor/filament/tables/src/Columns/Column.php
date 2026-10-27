@@ -12,14 +12,16 @@ use Filament\Support\Concerns\HasAlignment;
 use Filament\Support\Concerns\HasCellState;
 use Filament\Support\Concerns\HasExtraAttributes;
 use Filament\Support\Concerns\HasPlaceholder;
+use Filament\Support\Concerns\HasRelatedRecord;
 use Filament\Support\Concerns\HasVerticalAlignment;
 use Filament\Support\Concerns\HasWidth;
 use Filament\Support\Enums\Alignment;
+use Filament\Support\Enums\VerticalAlignment;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Tables\Columns\Concerns\HasTooltip;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
-use Illuminate\View\ComponentAttributeBag;
 use LogicException;
 
 use function Filament\Support\generate_href_html;
@@ -53,6 +55,7 @@ class Column extends ViewComponent
     use HasCellState;
     use HasExtraAttributes;
     use HasPlaceholder;
+    use HasRelatedRecord;
     use HasTooltip;
     use HasVerticalAlignment;
     use HasWidth;
@@ -60,6 +63,8 @@ class Column extends ViewComponent
     protected string $evaluationIdentifier = 'column';
 
     protected string $viewIdentifier = 'column';
+
+    protected ?string $cachedCellAttributeHtml = null;
 
     final public function __construct(string $name)
     {
@@ -90,6 +95,11 @@ class Column extends ViewComponent
     public function getTable(): Table
     {
         return $this->table ?? $this->getGroup()?->getTable() ?? $this->getLayout()?->getTable() ?? throw new LogicException("The column [{$this->getName()}] is not mounted to a table.");
+    }
+
+    public function hasTable(): bool
+    {
+        return isset($this->table) || ($this->getGroup()?->hasTable() ?? false) || ($this->getLayout()?->hasTable() ?? false);
     }
 
     /**
@@ -134,7 +144,7 @@ class Column extends ViewComponent
             return null;
         }
 
-        $attributes = (new ComponentAttributeBag)
+        $attributes = (new FilamentComponentAttributeBag)
             ->gridColumn(
                 $this->getColumnSpan(),
                 $this->getColumnStart(),
@@ -187,6 +197,40 @@ class Column extends ViewComponent
         </<?= $wrapperTag ?>>
 
         <?php return new HtmlString(ob_get_clean());
+    }
+
+    public function getCellAttributeHtml(): string
+    {
+        $columnAlignment = $this->getAlignment();
+        $columnVerticalAlignment = $this->getVerticalAlignment();
+
+        return $this->getExtraCellAttributeBag()->class([
+            'fi-ta-cell',
+            'fi-ta-cell-' . str($this->getName())->camel()->kebab(),
+            (($columnAlignment instanceof Alignment) ? "fi-align-{$columnAlignment->value}" : (is_string($columnAlignment) ? $columnAlignment : '')),
+            (($columnVerticalAlignment instanceof VerticalAlignment) ? "fi-vertical-align-{$columnVerticalAlignment->value}" : (is_string($columnVerticalAlignment) ? $columnVerticalAlignment : '')),
+            (filled($columnHiddenFrom = $this->getHiddenFrom()) ? "{$columnHiddenFrom}:fi-hidden" : ''),
+            (filled($columnVisibleFrom = $this->getVisibleFrom()) ? "{$columnVisibleFrom}:fi-visible" : ''),
+        ])->toHtml();
+    }
+
+    public function getCachedCellAttributeHtml(): string
+    {
+        if ($this->cachedCellAttributeHtml !== null) {
+            return $this->cachedCellAttributeHtml;
+        }
+
+        if (
+            $this->hasDynamicExtraCellAttributes()
+            || $this->hasDynamicAlignment()
+            || $this->hasDynamicVerticalAlignment()
+            || $this->hasDynamicHiddenFrom()
+            || $this->hasDynamicVisibleFrom()
+        ) {
+            return $this->getCellAttributeHtml();
+        }
+
+        return $this->cachedCellAttributeHtml = $this->getCellAttributeHtml();
     }
 
     /**

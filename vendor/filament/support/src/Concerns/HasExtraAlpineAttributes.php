@@ -3,6 +3,7 @@
 namespace Filament\Support\Concerns;
 
 use Closure;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\View\ComponentAttributeBag;
 
 trait HasExtraAlpineAttributes
@@ -21,6 +22,10 @@ trait HasExtraAlpineAttributes
         // pass unsanitized user input as attribute names or values.
 
         if ($merge) {
+            if (($attributes instanceof Closure) && in_array($attributes, $this->extraAlpineAttributes, strict: true)) {
+                return $this;
+            }
+
             $this->extraAlpineAttributes[] = $attributes;
         } else {
             $this->extraAlpineAttributes = [$attributes];
@@ -34,7 +39,7 @@ trait HasExtraAlpineAttributes
      */
     public function getExtraAlpineAttributes(): array
     {
-        $temporaryAttributeBag = new ComponentAttributeBag;
+        $temporaryAttributeBag = new FilamentComponentAttributeBag;
 
         foreach ($this->extraAlpineAttributes as $extraAlpineAttributes) {
             $temporaryAttributeBag = $temporaryAttributeBag->merge($this->evaluate($extraAlpineAttributes), escape: false);
@@ -45,6 +50,6 @@ trait HasExtraAlpineAttributes
 
     public function getExtraAlpineAttributeBag(): ComponentAttributeBag
     {
-        return new ComponentAttributeBag($this->getExtraAlpineAttributes());
+        return new FilamentComponentAttributeBag($this->getExtraAlpineAttributes());
     }
 }

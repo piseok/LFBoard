@@ -52,12 +52,33 @@ class SelectFilter extends BaseFilter
         );
 
         $this->indicateUsing(static function (SelectFilter $filter, array $state): array {
-            if ($filter->isMultiple()) {
-                if (blank($state['values'] ?? null)) {
-                    return [];
-                }
+            if (blank($filter->isMultiple() ? ($state['values'] ?? null) : ($state['value'] ?? null))) {
+                return [];
+            }
 
-                if ($filter->queriesRelationships()) {
+            $relationshipOptionLabels = null;
+
+            if ($filter->queriesRelationships()) {
+                $relationshipOptionLabels = $filter->getTable()->withAppliedFiltersFormState(static function () use ($filter): ?array {
+                    $select = $filter->getTable()->getFiltersForm()->getComponentByStatePath(
+                        $filter->getName() . '.' . ($filter->isMultiple() ? 'values' : 'value'),
+                        withHidden: true,
+                    );
+
+                    if (! $select instanceof Select) {
+                        return null;
+                    }
+
+                    return $filter->isMultiple()
+                        ? $select->getOptionLabels(withDefaults: false)
+                        : [$select->getOptionLabel(withDefault: false)];
+                });
+            }
+
+            if ($filter->isMultiple()) {
+                if ($relationshipOptionLabels !== null) {
+                    $labels = $relationshipOptionLabels;
+                } elseif ($filter->queriesRelationships()) {
                     $relationshipQuery = $filter->getRelationshipQuery();
 
                     $labels = [];
@@ -106,11 +127,9 @@ class SelectFilter extends BaseFilter
                 return [$indicator];
             }
 
-            if (blank($state['value'] ?? null)) {
-                return [];
-            }
-
-            if ($filter->queriesRelationships()) {
+            if ($relationshipOptionLabels !== null) {
+                $label = $relationshipOptionLabels[0] ?? null;
+            } elseif ($filter->queriesRelationships()) {
                 if (
                     $filter->hasEmptyRelationshipOption() &&
                     ($state['value'] === static::EMPTY_RELATIONSHIP_OPTION_KEY)
@@ -229,9 +248,11 @@ class SelectFilter extends BaseFilter
             in_array(static::EMPTY_RELATIONSHIP_OPTION_KEY, Arr::wrap($values))
         ) {
             if (filled($filteredValues)) {
-                $query
-                    ->where(fn (Builder $query) => $applyRelationshipScope($query))
-                    ->orWhereDoesntHave($this->getRelationshipName());
+                $query->where(function (Builder $query) use ($applyRelationshipScope): void {
+                    $query
+                        ->where(fn (Builder $query) => $applyRelationshipScope($query))
+                        ->orWhereDoesntHave($this->getRelationshipName());
+                });
             } else {
                 $query->whereDoesntHave($this->getRelationshipName());
             }

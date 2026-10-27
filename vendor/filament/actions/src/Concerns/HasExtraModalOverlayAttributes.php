@@ -3,6 +3,7 @@
 namespace Filament\Actions\Concerns;
 
 use Closure;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\View\ComponentAttributeBag;
 
 trait HasExtraModalOverlayAttributes
@@ -18,6 +19,10 @@ trait HasExtraModalOverlayAttributes
     public function extraModalOverlayAttributes(array | Closure $attributes, bool $merge = false): static
     {
         if ($merge) {
+            if (($attributes instanceof Closure) && in_array($attributes, $this->extraModalOverlayAttributes, strict: true)) {
+                return $this;
+            }
+
             $this->extraModalOverlayAttributes[] = $attributes;
         } else {
             $this->extraModalOverlayAttributes = [$attributes];
@@ -31,7 +36,7 @@ trait HasExtraModalOverlayAttributes
      */
     public function getExtraModalOverlayAttributes(): array
     {
-        $temporaryAttributeBag = new ComponentAttributeBag;
+        $temporaryAttributeBag = new FilamentComponentAttributeBag;
 
         foreach ($this->extraModalOverlayAttributes as $extraModalOverlayAttributes) {
             $temporaryAttributeBag = $temporaryAttributeBag->merge($this->evaluate($extraModalOverlayAttributes), escape: false);
@@ -42,6 +47,6 @@ trait HasExtraModalOverlayAttributes
 
     public function getExtraModalOverlayAttributeBag(): ComponentAttributeBag
     {
-        return new ComponentAttributeBag($this->getExtraModalOverlayAttributes());
+        return new FilamentComponentAttributeBag($this->getExtraModalOverlayAttributes());
     }
 }

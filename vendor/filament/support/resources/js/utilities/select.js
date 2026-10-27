@@ -1,5 +1,6 @@
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
 import Sortable from 'sortablejs'
+import normalizeSearchString from './normalize-search-string.js'
 
 // Helper function to check if a value is null, undefined, or an empty string
 function blank(value) {
@@ -18,9 +19,13 @@ function filled(value) {
 
 export class Select {
     constructor({
+        accessibilityAttributes = {},
+        ariaLabel = null,
         canOptionLabelsWrap = true,
         canSelectPlaceholder = true,
+        clearButtonLabel = 'Clear selection',
         element,
+        errorMessage = 'The options could not be loaded. Please try again.',
         getOptionLabelUsing = null,
         getOptionLabelsUsing = null,
         getOptionsUsing = null,
@@ -28,6 +33,7 @@ export class Select {
         hasDynamicOptions = false,
         hasDynamicSearchResults = true,
         hasInitialNoOptionsMessage = false,
+        id = null,
         initialOptionLabel = null,
         initialOptionLabels = null,
         initialState = null,
@@ -48,23 +54,32 @@ export class Select {
         optionsLimit = null,
         placeholder,
         position = null,
+        removeButtonLabel = 'Remove :label',
         searchableOptionFields = ['label'],
         searchDebounce = 1000,
         searchingMessage = 'Searching...',
+        searchLabel = 'Search',
         searchPrompt = 'Search...',
         state,
         statePath = null,
     }) {
+        this.accessibilityAttributes = accessibilityAttributes
+        this.ariaLabel = ariaLabel
         this.canOptionLabelsWrap = canOptionLabelsWrap
         this.canSelectPlaceholder = canSelectPlaceholder
+        this.clearButtonLabel = clearButtonLabel
         this.element = element
+        this.errorMessage = errorMessage
         this.getOptionLabelUsing = getOptionLabelUsing
         this.getOptionLabelsUsing = getOptionLabelsUsing
         this.getOptionsUsing = getOptionsUsing
         this.getSearchResultsUsing = getSearchResultsUsing
         this.hasDynamicOptions = hasDynamicOptions
-        this.hasDynamicSearchResults = hasDynamicSearchResults
+        this.hasDynamicSearchResults =
+            hasDynamicSearchResults &&
+            typeof getSearchResultsUsing === 'function'
         this.hasInitialNoOptionsMessage = hasInitialNoOptionsMessage
+        this.id = id
         this.initialOptionLabel = initialOptionLabel
         this.initialOptionLabels = initialOptionLabels
         this.initialState = initialState
@@ -86,26 +101,36 @@ export class Select {
         this.originalOptions = JSON.parse(JSON.stringify(options))
         this.placeholder = placeholder
         this.position = position
+        this.removeButtonLabel = removeButtonLabel
         this.searchableOptionFields = Array.isArray(searchableOptionFields)
             ? searchableOptionFields
             : ['label']
         this.searchDebounce = searchDebounce
         this.searchingMessage = searchingMessage
+        this.searchLabel = searchLabel
         this.searchPrompt = searchPrompt
         this.state = state
         this.statePath = statePath
 
-        // Tracks the latest initiated async search to invalidate stale results
+        // Invalidate work when its query, opening session, or instance expires.
         this.activeSearchId = 0
+        this.openId = 0
+        this.isDestroyed = false
 
         // Central repository for option labels
         this.labelRepository = {}
 
         this.isOpen = false
-        this.selectedIndex = -1
+        this.activeValue = null
+        this.typeahead = ''
+        this.typeaheadTime = 0
         this.searchQuery = ''
         this.searchTimeout = null
         this.isSearching = false
+        this.isLoadingOptions = false
+        this.hasOptionsError = false
+        this.maxItemsMessageElement = null
+        this.badgesSortable = null
         // Version token to prevent race conditions when updating the selected display
         this.selectedDisplayVersion = 0
 
@@ -151,38 +176,55 @@ export class Select {
             )
         }
 
-        this.container.setAttribute('aria-haspopup', 'listbox')
-
         // Create the button that toggles the dropdown
         this.selectButton = document.createElement('button')
         this.selectButton.className = 'fi-select-input-btn'
         this.selectButton.type = 'button'
+        if (!this.isSearchable) {
+            this.selectButton.setAttribute('role', 'combobox')
+        }
+        this.selectButton.setAttribute('aria-haspopup', 'listbox')
         this.selectButton.setAttribute('aria-expanded', 'false')
+
+        // Associate the button with the field's `<label>`, or name it directly
+        if (filled(this.id)) {
+            this.selectButton.id = this.id
+        }
+
+        if (filled(this.ariaLabel)) {
+            this.selectButton.setAttribute('aria-label', this.ariaLabel)
+        }
 
         // Create the selected value display
         this.selectedDisplay = document.createElement('div')
         this.selectedDisplay.className = 'fi-select-input-value-ctn'
 
-        // Update the selected display based on current state
-        this.updateSelectedDisplay()
-
-        this.selectButton.appendChild(this.selectedDisplay)
+        if (this.isMultiple) {
+            this.container.classList.add('fi-select-input-ctn-multiple')
+            if (this.isReorderable) {
+                this.container.classList.add('fi-select-input-ctn-reorderable')
+            }
+            this.selectionSummary = document.createElement('span')
+            this.selectionSummary.className = 'fi-sr-only'
+            this.selectButton.appendChild(this.selectionSummary)
+        } else {
+            this.selectButton.appendChild(this.selectedDisplay)
+        }
 
         // Create the dropdown
         this.dropdown = document.createElement('div')
         this.dropdown.className = 'fi-dropdown-panel fi-scrollable'
-        this.dropdown.setAttribute('role', 'listbox')
-        this.dropdown.setAttribute('tabindex', '-1')
         this.dropdown.style.display = 'none'
 
         // Generate a unique ID for the dropdown
         this.dropdownId = `fi-select-input-dropdown-${Math.random().toString(36).substring(2, 11)}`
-        this.dropdown.id = this.dropdownId
-
-        // Set aria-multiselectable for multi-select
-        if (this.isMultiple) {
-            this.dropdown.setAttribute('aria-multiselectable', 'true')
+        this.selectButton.setAttribute('aria-controls', this.dropdownId)
+        if (!this.selectionSummary) {
+            this.selectionSummary = document.createElement('span')
+            this.selectionSummary.className = 'fi-sr-only'
+            this.container.appendChild(this.selectionSummary)
         }
+        this.selectionSummary.id = `${this.dropdownId}-value`
 
         // Add search input if searchable
         if (this.isSearchable) {
@@ -193,7 +235,10 @@ export class Select {
             this.searchInput.className = 'fi-input'
             this.searchInput.type = 'text'
             this.searchInput.placeholder = this.searchPrompt
-            this.searchInput.setAttribute('aria-label', 'Search')
+            this.searchInput.setAttribute('role', 'combobox')
+            this.searchInput.setAttribute('aria-autocomplete', 'list')
+            this.searchInput.setAttribute('aria-expanded', 'false')
+            this.searchInput.setAttribute('aria-controls', this.dropdownId)
 
             this.searchContainer.appendChild(this.searchInput)
             this.dropdown.appendChild(this.searchContainer)
@@ -207,131 +252,69 @@ export class Select {
 
                 this.handleSearch(event)
             })
-
-            // Handle Tab, Arrow Up, Arrow Down, and Enter in search input
-            this.searchInput.addEventListener('keydown', (event) => {
-                // If the select is disabled, don't handle keyboard events
-                if (this.isDisabled) {
-                    return
-                }
-
-                if (event.key === 'Tab') {
-                    event.preventDefault()
-
-                    const options = this.getVisibleOptions()
-                    if (options.length === 0) return
-
-                    // If Shift+Tab, focus the last option, otherwise focus the first option
-                    if (event.shiftKey) {
-                        this.selectedIndex = options.length - 1
-                    } else {
-                        this.selectedIndex = 0
-                    }
-
-                    // Remove focus from any previously focused option
-                    options.forEach((option) => {
-                        option.classList.remove('fi-selected')
-                    })
-
-                    options[this.selectedIndex].classList.add('fi-selected')
-                    options[this.selectedIndex].focus()
-                } else if (event.key === 'ArrowDown') {
-                    event.preventDefault()
-                    event.stopPropagation() // Prevent page scrolling
-
-                    const options = this.getVisibleOptions()
-                    if (options.length === 0) return
-
-                    // Reset selectedIndex to -1 to ensure we focus the first option
-                    this.selectedIndex = -1
-                    // Blur the search input to allow arrow key navigation between options
-                    this.searchInput.blur()
-                    this.focusNextOption()
-                } else if (event.key === 'ArrowUp') {
-                    event.preventDefault()
-                    event.stopPropagation() // Prevent page scrolling
-
-                    const options = this.getVisibleOptions()
-                    if (options.length === 0) return
-
-                    // Set selectedIndex to the last option
-                    this.selectedIndex = options.length - 1
-                    // Blur the search input to allow arrow key navigation between options
-                    this.searchInput.blur()
-
-                    // Focus the last option directly
-                    options[this.selectedIndex].classList.add('fi-selected')
-                    options[this.selectedIndex].focus()
-
-                    // Set aria-activedescendant to the ID of the focused option
-                    if (options[this.selectedIndex].id) {
-                        this.dropdown.setAttribute(
-                            'aria-activedescendant',
-                            options[this.selectedIndex].id,
-                        )
-                    }
-
-                    this.scrollOptionIntoView(options[this.selectedIndex])
-                } else if (event.key === 'Enter') {
-                    // Prevent default form submission behavior
-                    event.preventDefault()
-                    event.stopPropagation()
-
-                    // Check if search results are still loading
-                    if (this.isSearching) {
-                        return
-                    }
-
-                    // Select first visible non-disabled option
-                    const options = this.getVisibleOptions()
-                    if (options.length === 0) {
-                        return
-                    }
-
-                    // Find the first option that is not disabled
-                    const firstEnabled = options.find((option) => {
-                        // Consider both aria-disabled and .fi-disabled class
-                        const ariaDisabled =
-                            option.getAttribute('aria-disabled') === 'true'
-                        const hasDisabledClass =
-                            option.classList.contains('fi-disabled')
-                        // Also ensure it is focusable/visible
-                        const isHidden = option.offsetParent === null
-                        return !(ariaDisabled || hasDisabledClass || isHidden)
-                    })
-
-                    if (!firstEnabled) {
-                        return
-                    }
-
-                    const value = firstEnabled.getAttribute('data-value')
-                    if (value === null) {
-                        return
-                    }
-
-                    this.selectOption(value)
-                }
-            })
         }
 
         // Create the options list
         this.optionsList = document.createElement('ul')
+        this.optionsList.id = this.dropdownId
+        this.optionsList.setAttribute('role', 'listbox')
+        if (this.isMultiple) {
+            this.optionsList.setAttribute('aria-multiselectable', 'true')
+        }
+        this.optionsList.addEventListener('mousedown', (event) =>
+            event.preventDefault(),
+        )
+
+        // Pressing the dropdown's own scrollbar targets the dropdown itself.
+        // Classic (non-overlay) scrollbars, as on Windows, move focus out of
+        // the select on press, which closes the dropdown before it can scroll.
+        this.dropdown.addEventListener('mousedown', (event) => {
+            if (event.target === this.dropdown) {
+                event.preventDefault()
+            }
+        })
+
+        // Create a visually hidden live region to announce loading / empty / limit messages,
+        // before `renderOptions()` since it may announce a "no options" message
+        this.statusRegion = document.createElement('div')
+        this.statusRegion.className = 'fi-sr-only'
+        this.statusRegion.setAttribute('role', 'status')
+        this.statusRegion.setAttribute('aria-live', 'polite')
+        this.statusRegion.setAttribute('aria-atomic', 'true')
 
         // Render options
         this.renderOptions()
 
         // Append everything to the container
         this.container.appendChild(this.selectButton)
+        if (this.isMultiple) {
+            this.container.appendChild(this.selectedDisplay)
+        }
         this.container.appendChild(this.dropdown)
+        this.container.appendChild(this.statusRegion)
 
         // Append the container to the element
         this.element.appendChild(this.container)
+
+        this.setAccessibilityAttributes(this.accessibilityAttributes)
+        this.updateSelectedDisplay()
 
         // Apply disabled state if needed
         this.applyDisabledState()
     }
 
     renderOptions() {
+        // Selection-only updates must not revive candidates for an obsolete query.
+        if (
+            this.isSearching ||
+            this.hasOptionsError ||
+            (this.isLoadingOptions &&
+                (!this.searchQuery || !this.hasDynamicSearchResults))
+        )
+            return
+
+        const activeValue = this.activeValue
+        this.setActiveOption(null)
         this.optionsList.innerHTML = ''
 
         // Placeholder option removed as there are X buttons in the main part
@@ -402,6 +385,7 @@ export class Select {
                     }
 
                     this.renderOptionGroup(option.label, groupOptions)
+                    ungroupedList = null
                     renderedCount += groupOptions.length
                     totalRenderedCount += groupOptions.length
                 }
@@ -422,6 +406,7 @@ export class Select {
                     // We know there's at least one (the current option), so create the list
                     ungroupedList = document.createElement('ul')
                     ungroupedList.className = 'fi-dropdown-list'
+                    ungroupedList.setAttribute('role', 'presentation')
                     this.optionsList.appendChild(ungroupedList)
                 }
 
@@ -449,16 +434,10 @@ export class Select {
             ) {
                 this.showNoOptionsMessage()
             }
-            // If in multiple mode and no search query, hide the dropdown
-            else if (this.isMultiple && this.isOpen && !this.isSearchable) {
-                this.closeDropdown()
-            }
 
-            // Remove the options list from the DOM if it's already there
-            if (this.optionsList.parentNode === this.dropdown) {
-                this.dropdown.removeChild(this.optionsList)
-            }
+            this.optionsList.hidden = true
         } else {
+            this.optionsList.hidden = false
             // Hide any existing messages (like "No results")
             this.hideLoadingState()
 
@@ -466,6 +445,33 @@ export class Select {
             if (this.optionsList.parentNode !== this.dropdown) {
                 this.dropdown.appendChild(this.optionsList)
             }
+        }
+
+        // Keep the controlled element connected even when there are no candidates.
+        if (this.optionsList.parentNode !== this.dropdown) {
+            this.dropdown.appendChild(this.optionsList)
+        }
+
+        if (this.isOpen) {
+            const options = this.getEnabledOptions()
+            this.setActiveOption(
+                options.find(
+                    (option) => option.dataset.value === activeValue,
+                ) ??
+                    (activeValue !== null || !this.isSearchable
+                        ? (options.find(
+                              (option) =>
+                                  this.typeahead &&
+                                  normalizeSearchString(
+                                      option.textContent.trim(),
+                                  ).startsWith(this.typeahead),
+                          ) ??
+                          options.find(
+                              (option) => option.dataset.value === this.state,
+                          ) ??
+                          options[0])
+                        : null),
+            )
         }
     }
 
@@ -477,6 +483,7 @@ export class Select {
 
         const optionGroup = document.createElement('li')
         optionGroup.className = 'fi-select-input-option-group'
+        optionGroup.setAttribute('role', 'presentation')
 
         const optionGroupLabel = document.createElement('div')
         optionGroupLabel.className = 'fi-dropdown-header'
@@ -484,6 +491,8 @@ export class Select {
 
         const groupOptionsList = document.createElement('ul')
         groupOptionsList.className = 'fi-dropdown-list'
+        groupOptionsList.setAttribute('role', 'group')
+        groupOptionsList.setAttribute('aria-label', label)
 
         options.forEach((option) => {
             const optionElement = this.createOptionElement(option.value, option)
@@ -525,7 +534,6 @@ export class Select {
 
         option.setAttribute('role', 'option')
         option.setAttribute('data-value', optionValue)
-        option.setAttribute('tabindex', '0') // Make the option focusable
 
         if (isDisabled) {
             option.setAttribute('aria-disabled', 'true')
@@ -548,10 +556,6 @@ export class Select {
 
         option.setAttribute('aria-selected', isSelected ? 'true' : 'false')
 
-        if (isSelected) {
-            option.classList.add('fi-selected')
-        }
-
         const labelSpan = document.createElement('span')
 
         // Handle HTML content if allowed
@@ -569,21 +573,6 @@ export class Select {
                 event.preventDefault()
                 event.stopPropagation()
                 this.selectOption(optionValue)
-
-                // Prevent the dropdown from losing focus
-                if (this.isMultiple) {
-                    // For multiple selection, maintain focus within the dropdown
-                    if (this.isSearchable && this.searchInput) {
-                        setTimeout(() => {
-                            this.searchInput.focus()
-                        }, 0)
-                    } else {
-                        // Keep focus on the option
-                        setTimeout(() => {
-                            option.focus()
-                        }, 0)
-                    }
-                }
             })
         }
 
@@ -591,6 +580,7 @@ export class Select {
     }
 
     async updateSelectedDisplay() {
+        if (this.isDestroyed) return
         // Increment version to invalidate any in-flight renders
         this.selectedDisplayVersion = this.selectedDisplayVersion + 1
         const renderVersion = this.selectedDisplayVersion
@@ -613,7 +603,13 @@ export class Select {
 
             // Commit if still current
             if (renderVersion === this.selectedDisplayVersion) {
-                this.selectedDisplay.replaceChildren(fragment)
+                if (
+                    !fragment.querySelector('.fi-select-input-value-badges-ctn')
+                ) {
+                    this.destroyBadgesSortable()
+                }
+
+                this.commitSelectedDisplay(fragment)
                 if (this.isOpen) {
                     this.positionDropdown()
                 }
@@ -629,7 +625,8 @@ export class Select {
             fragment.appendChild(placeholderSpan)
 
             if (renderVersion === this.selectedDisplayVersion) {
-                this.selectedDisplay.replaceChildren(fragment)
+                this.destroyBadgesSortable()
+                this.commitSelectedDisplay(fragment)
 
                 // Remove the remove button since there's no selection
                 const existingRemoveButton = this.container.querySelector(
@@ -649,12 +646,43 @@ export class Select {
         this.addSingleSelectionDisplay(selectedLabel, fragment)
 
         if (renderVersion === this.selectedDisplayVersion) {
-            this.selectedDisplay.replaceChildren(fragment)
+            this.destroyBadgesSortable()
+            this.commitSelectedDisplay(fragment)
         }
+    }
+
+    commitSelectedDisplay(fragment) {
+        const focusedButton = this.selectedDisplay.contains(
+            document.activeElement,
+        )
+            ? document.activeElement
+            : null
+        const focusedValue =
+            focusedButton?.closest('[data-value]')?.dataset.value
+        this.selectedDisplay.replaceChildren(fragment)
+        this.updateSelectionSummary()
+        if (focusedButton) {
+            const target = this.isOpen
+                ? this.getFocusOwner()
+                : (this.selectedDisplay.querySelector(
+                      `[data-value="${CSS.escape(focusedValue ?? '')}"] button`,
+                  ) ?? this.selectButton)
+            target.focus()
+        }
+    }
+
+    updateSelectionSummary() {
+        this.selectionSummary.textContent = Array.from(
+            this.selectedDisplay.querySelectorAll(
+                '.fi-badge-label, .fi-select-input-value-label, .fi-select-input-placeholder',
+            ),
+            (label) => label.textContent,
+        ).join(', ')
     }
 
     // Helper method to get labels for multiple selection
     async getLabelsForMultipleSelection() {
+        const renderVersion = this.selectedDisplayVersion
         let selectedLabels = this.getSelectedOptionLabels()
 
         // Check for values that are not in the repository or options
@@ -706,6 +734,11 @@ export class Select {
             try {
                 // Fetch labels for missing values - returns array of {label, value} objects
                 const fetchedOptionsArray = await this.getOptionLabelsUsing()
+                if (
+                    this.isDestroyed ||
+                    renderVersion !== this.selectedDisplayVersion
+                )
+                    return []
 
                 // Store fetched labels in the repository
                 for (const option of fetchedOptionsArray) {
@@ -748,7 +781,7 @@ export class Select {
     createBadgeElement(value, label) {
         const badge = document.createElement('span')
         badge.className =
-            'fi-badge fi-size-md fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-200'
+            'fi-badge fi-size-md fi-color fi-color-primary fi-text-color-700 dark:fi-text-color-200'
 
         // Add a data attribute to identify this badge by its value
         if (filled(value)) {
@@ -788,18 +821,40 @@ export class Select {
         const removeButton = document.createElement('button')
         removeButton.type = 'button'
         removeButton.className = 'fi-badge-delete-btn'
-        removeButton.innerHTML =
-            '<svg class="fi-icon fi-size-xs" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" data-slot="icon"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"></path></svg>'
         removeButton.setAttribute(
             'aria-label',
-            'Remove ' +
-                (this.isHtmlAllowed ? label.replace(/<[^>]*>/g, '') : label),
+            this.removeButtonLabel.replace(
+                ':label',
+                this.isHtmlAllowed ? label.replace(/<[^>]*>/g, '') : label,
+            ),
         )
+
+        const removeButtonIcon = document.createElement('span')
+        removeButtonIcon.className = 'fi-badge-delete-btn-icon'
+        removeButtonIcon.setAttribute('aria-hidden', 'true')
+        removeButton.appendChild(removeButtonIcon)
+
+        if (this.isDisabled) {
+            removeButton.setAttribute('disabled', 'disabled')
+            removeButton.classList.add('fi-disabled')
+        }
 
         removeButton.addEventListener('click', (event) => {
             event.stopPropagation() // Prevent dropdown from toggling
             if (filled(value)) {
+                const buttons = Array.from(
+                    this.selectedDisplay.querySelectorAll(
+                        '.fi-badge-delete-btn',
+                    ),
+                )
+                const index = buttons.indexOf(removeButton)
+                const focusTarget = this.isOpen
+                    ? this.getFocusOwner()
+                    : (buttons[index + 1] ??
+                      buttons[index - 1] ??
+                      this.selectButton)
                 this.selectOption(value) // This will remove the value since it's already selected
+                if (!this.isDisabled) focusTarget.focus()
             }
         })
 
@@ -808,9 +863,7 @@ export class Select {
             if (event.key === ' ' || event.key === 'Enter') {
                 event.preventDefault()
                 event.stopPropagation() // Prevent event from bubbling up to selectButton
-                if (filled(value)) {
-                    this.selectOption(value)
-                }
+                removeButton.click()
             }
         })
 
@@ -841,8 +894,11 @@ export class Select {
                 event.stopPropagation()
             })
 
-            new Sortable(badgesContainer, {
+            this.destroyBadgesSortable()
+
+            this.badgesSortable = new Sortable(badgesContainer, {
                 animation: 150,
+                disabled: this.isDisabled,
                 onEnd: () => {
                     const newState = []
 
@@ -853,14 +909,22 @@ export class Select {
                         })
 
                     this.state = newState
+                    this.updateSelectionSummary()
                     this.onStateChange(this.state)
                 },
             })
         }
     }
 
+    destroyBadgesSortable() {
+        this.badgesSortable?.destroy()
+        this.badgesSortable = null
+    }
+
     // Helper method to get label for single selection
     async getLabelForSingleSelection() {
+        const value = this.state
+        const renderVersion = this.selectedDisplayVersion
         // First check if we have the label in the repository
         let selectedLabel = this.labelRepository[this.state]
 
@@ -886,10 +950,16 @@ export class Select {
         else if (blank(selectedLabel) && this.getOptionLabelUsing) {
             try {
                 selectedLabel = await this.getOptionLabelUsing()
+                if (
+                    this.isDestroyed ||
+                    renderVersion !== this.selectedDisplayVersion ||
+                    value !== this.state
+                )
+                    return null
 
                 // Store the fetched label in the repository
                 if (filled(selectedLabel) && filled(this.state)) {
-                    this.labelRepository[this.state] = selectedLabel
+                    this.labelRepository[value] = selectedLabel
                 }
             } catch (error) {
                 console.error('Error fetching option label:', error)
@@ -930,9 +1000,12 @@ export class Select {
         const removeButton = document.createElement('button')
         removeButton.type = 'button'
         removeButton.className = 'fi-select-input-value-remove-btn'
-        removeButton.innerHTML =
-            '<svg class="fi-icon fi-size-sm" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>'
-        removeButton.setAttribute('aria-label', 'Clear selection')
+        removeButton.setAttribute('aria-label', this.clearButtonLabel)
+
+        if (this.isDisabled) {
+            removeButton.setAttribute('disabled', 'disabled')
+            removeButton.classList.add('fi-disabled')
+        }
 
         removeButton.addEventListener('click', (event) => {
             event.stopPropagation() // Prevent dropdown from toggling
@@ -1010,16 +1083,34 @@ export class Select {
                 return
             }
 
-            // Skip navigation if search input is focused and it's not Tab or Escape
-            if (
-                this.isSearchable &&
-                document.activeElement === this.searchInput &&
-                !['Tab', 'Escape'].includes(event.key)
-            ) {
+            this.handleDropdownKeydown(event)
+        }
+
+        this.focusinListener = () => this.syncActiveDescendant()
+        this.focusoutListener = (event) => {
+            this.selectButton.removeAttribute('aria-activedescendant')
+            this.searchInput?.removeAttribute('aria-activedescendant')
+            queueMicrotask(() => {
+                if (this.isDestroyed || !this.isOpen) return
+                if (
+                    this.isTabbing ||
+                    !this.container.contains(event.relatedTarget)
+                ) {
+                    this.isTabbing = false
+                    this.closeDropdown()
+                }
+            })
+        }
+
+        this.dropdownEscapeListener = (event) => {
+            if (!this.isOpen) {
                 return
             }
 
-            this.handleDropdownKeydown(event)
+            this.closeDropdown()
+            this.selectButton.focus()
+            event.preventDefault()
+            event.stopPropagation()
         }
 
         // Toggle dropdown when button is clicked
@@ -1036,6 +1127,12 @@ export class Select {
 
         // Keyboard navigation within dropdown
         this.dropdown.addEventListener('keydown', this.dropdownKeydownListener)
+        this.container.addEventListener('focusin', this.focusinListener)
+        this.container.addEventListener('focusout', this.focusoutListener)
+        this.element.addEventListener(
+            'dropdown-escape',
+            this.dropdownEscapeListener,
+        )
 
         // Add event listener for refreshing selected option labels (only for non-multiple selects)
         if (
@@ -1054,31 +1151,21 @@ export class Select {
                     if (filled(this.state)) {
                         try {
                             // Clear the label from the repository so it can be fetched again
+                            const value = this.state
+                            const renderVersion = ++this.selectedDisplayVersion
                             delete this.labelRepository[this.state]
 
                             // Get the new label
                             const newLabel = await this.getOptionLabelUsing()
+                            if (
+                                this.isDestroyed ||
+                                value !== this.state ||
+                                renderVersion !== this.selectedDisplayVersion
+                            )
+                                return
 
-                            // Store the new label in the repository
-                            if (filled(newLabel)) {
-                                this.labelRepository[this.state] = newLabel
-                            }
-
-                            // Update the displayed label
-                            const labelContainer =
-                                this.selectedDisplay.querySelector(
-                                    '.fi-select-input-value-label',
-                                )
-                            if (filled(labelContainer)) {
-                                if (this.isHtmlAllowed) {
-                                    labelContainer.innerHTML = newLabel
-                                } else {
-                                    labelContainer.textContent = newLabel
-                                }
-                            }
-
-                            // Update the label in the options list
                             this.updateOptionLabelInList(this.state, newLabel)
+                            this.updateSelectedDisplay()
                         } catch (error) {
                             console.error(
                                 'Error refreshing option label:',
@@ -1156,87 +1243,28 @@ export class Select {
 
     // Handle keyboard events for the select button
     handleSelectButtonKeydown(event) {
-        switch (event.key) {
-            case 'ArrowDown':
-                event.preventDefault()
-                event.stopPropagation() // Prevent page scrolling
-                if (!this.isOpen) {
-                    this.openDropdown()
-                } else {
-                    this.focusNextOption()
-                }
-                break
-            case 'ArrowUp':
-                event.preventDefault()
-                event.stopPropagation() // Prevent page scrolling
-                if (!this.isOpen) {
-                    this.openDropdown()
-                } else {
-                    this.focusPreviousOption()
-                }
-                break
-            case ' ':
-                event.preventDefault()
-                if (this.isOpen) {
-                    if (this.selectedIndex >= 0) {
-                        const focusedOption =
-                            this.getVisibleOptions()[this.selectedIndex]
-                        if (focusedOption) {
-                            focusedOption.click()
-                        }
-                    }
-                } else {
-                    this.openDropdown()
-                }
-                break
-            case 'Enter':
-                // Do nothing for Enter key, allow it to submit the form
-                break
-            case 'Escape':
-                if (this.isOpen) {
-                    event.preventDefault()
-                    this.closeDropdown()
-                }
-                break
-            case 'Tab':
-                if (this.isOpen) {
-                    this.closeDropdown()
-                }
-                break
-            default:
-                // If searchable and user types a printable character, open dropdown and focus search input
-                if (
-                    this.isSearchable &&
-                    !event.ctrlKey &&
-                    !event.metaKey &&
-                    !event.altKey &&
-                    typeof event.key === 'string' &&
-                    event.key.length === 1
-                ) {
-                    event.preventDefault()
-                    const char = event.key
+        if (event.isComposing) return
 
-                    if (!this.isOpen) {
-                        this.openDropdown()
-                    }
-
-                    if (this.searchInput) {
-                        // Focus and append the typed character to the search input
-                        this.searchInput.focus()
-                        this.searchInput.value =
-                            (this.searchInput.value || '') + char
-                        // Trigger input event so search runs
-                        this.searchInput.dispatchEvent(
-                            new Event('input', { bubbles: true }),
-                        )
-                    }
-                }
-                break
+        if (
+            (!this.isOpen || this.isSearchable) &&
+            ['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)
+        ) {
+            event.preventDefault()
+            event.stopPropagation()
+            this.openDropdown()
+            return
         }
+
+        this.handleDropdownKeydown(event)
     }
 
     // Handle keyboard events within the dropdown
     handleDropdownKeydown(event) {
+        if (event.isComposing) return
+
+        const isEditing = event.target === this.searchInput
+        const options = this.getEnabledOptions()
+
         switch (event.key) {
             case 'ArrowDown':
                 event.preventDefault()
@@ -1249,43 +1277,42 @@ export class Select {
                 this.focusPreviousOption()
                 break
             case ' ':
-                event.preventDefault()
-                if (this.selectedIndex >= 0) {
-                    const focusedOption =
-                        this.getVisibleOptions()[this.selectedIndex]
-                    if (focusedOption) {
-                        focusedOption.click()
-                    }
-                }
-                break
+                if (isEditing) return
+            // Fall through to commit a select-only candidate.
             case 'Enter':
+                if (!this.isOpen) return
                 event.preventDefault()
-                if (this.selectedIndex >= 0) {
-                    const focusedOption =
-                        this.getVisibleOptions()[this.selectedIndex]
-                    if (focusedOption) {
-                        focusedOption.click()
-                    }
-                } else {
-                    // If no option is focused, submit the form
-                    const form = this.element.closest('form')
-                    if (form) {
-                        form.submit()
-                    }
+                event.stopPropagation()
+                const option =
+                    options.find(
+                        (option) => option.dataset.value === this.activeValue,
+                    ) ?? (isEditing ? options[0] : null)
+                if (option) {
+                    this.selectOption(option.dataset.value)
                 }
                 break
             case 'Escape':
+                if (!this.isOpen) return
                 event.preventDefault()
+                event.stopPropagation()
                 this.closeDropdown()
                 this.selectButton.focus()
                 break
             case 'Tab':
-                this.closeDropdown()
+                this.isTabbing = this.isOpen
+                break
+            case 'Home':
+            case 'End':
+                if (isEditing || !this.isOpen) return
+                event.preventDefault()
+                event.stopPropagation()
+                this.setActiveOption(
+                    event.key === 'Home' ? options[0] : options.at(-1),
+                )
                 break
             default:
-                // If searchable and user types a printable character while dropdown is open, focus search input and start search
                 if (
-                    this.isSearchable &&
+                    !isEditing &&
                     !event.ctrlKey &&
                     !event.metaKey &&
                     !event.altKey &&
@@ -1293,17 +1320,30 @@ export class Select {
                     event.key.length === 1
                 ) {
                     event.preventDefault()
-                    const char = event.key
+                    if (!this.isOpen) this.openDropdown()
 
-                    if (this.searchInput) {
-                        // Focus and append the typed character to the search input
-                        this.searchInput.focus()
+                    if (this.isSearchable) {
                         this.searchInput.value =
-                            (this.searchInput.value || '') + char
-                        // Trigger input event so search runs
+                            (this.searchInput.value || '') + event.key
                         this.searchInput.dispatchEvent(
                             new Event('input', { bubbles: true }),
                         )
+                    } else {
+                        const now = Date.now()
+                        this.typeahead =
+                            (now - this.typeaheadTime < 1000
+                                ? this.typeahead
+                                : '') + normalizeSearchString(event.key)
+                        this.typeaheadTime = now
+                        const matchingOption = this.getEnabledOptions().find(
+                            (option) =>
+                                normalizeSearchString(
+                                    option.textContent.trim(),
+                                ).startsWith(this.typeahead),
+                        )
+                        if (matchingOption) {
+                            this.setActiveOption(matchingOption)
+                        }
                     }
                 }
                 break
@@ -1322,47 +1362,23 @@ export class Select {
             return
         }
 
-        // In multiple selection mode with no search, check if there are any available options
-        if (
-            this.isMultiple &&
-            !this.isSearchable &&
-            !this.hasAvailableOptions()
-        ) {
-            return // No available options, don't open dropdown
-        }
-
         // Open the dropdown
         this.openDropdown()
     }
 
-    // Helper method to check if there are any available options
-    hasAvailableOptions() {
-        // For multiple selection, we need to check if there are any options that aren't already selected
-
-        for (const option of this.options) {
-            if (option.options && Array.isArray(option.options)) {
-                // This is an option group
-                for (const groupOption of option.options) {
-                    if (
-                        !Array.isArray(this.state) ||
-                        !this.state.includes(groupOption.value)
-                    ) {
-                        return true // At least one option is available
-                    }
-                }
-            } else if (
-                !Array.isArray(this.state) ||
-                !this.state.includes(option.value)
-            ) {
-                return true // At least one option is available
-            }
+    async openDropdown() {
+        if (this.isDestroyed || this.isDisabled) return
+        if (this.isOpen) {
+            this.getFocusOwner().focus()
+            return
         }
 
-        // No available options found
-        return false
-    }
+        const openId = ++this.openId
+        const searchId = ++this.activeSearchId
+        this.typeahead = ''
+        this.hasOptionsError = false
+        const dropdownWidth = `${this.selectButton.offsetWidth}px`
 
-    async openDropdown() {
         // Make dropdown visible but with position absolute by default, or fixed in containers with .fi-fixed-positioning-context class, and opacity 0 for measurement
         this.dropdown.style.display = 'block'
         this.dropdown.style.opacity = '0'
@@ -1377,9 +1393,12 @@ export class Select {
             ? 'fixed'
             : 'absolute'
         // Set width immediately to match the select button
-        this.dropdown.style.width = `${this.selectButton.offsetWidth}px`
+        this.dropdown.style.width = dropdownWidth
         this.selectButton.setAttribute('aria-expanded', 'true')
+        this.searchInput?.setAttribute('aria-expanded', 'true')
         this.isOpen = true
+        this.isTabbing = false
+        this.getFocusOwner().focus()
 
         // Position the dropdown using Floating UI
         this.positionDropdown()
@@ -1407,22 +1426,26 @@ export class Select {
         if (this.isSearchable && this.searchInput) {
             this.searchInput.value = ''
             this.searchQuery = ''
+        }
 
-            // If options are static, immediately reset to the unfiltered list.
-            if (!this.hasDynamicOptions) {
-                this.options = JSON.parse(JSON.stringify(this.originalOptions))
-                this.renderOptions()
-            }
+        // Restore static candidates and empty messages on every fresh open.
+        if (!this.hasDynamicOptions) {
+            this.options = JSON.parse(JSON.stringify(this.originalOptions))
+            this.renderOptions()
         }
 
         // If hasDynamicOptions is true, fetch options
         if (this.hasDynamicOptions && this.getOptionsUsing) {
             // Show loading message
+            this.isLoadingOptions = true
             this.showLoadingState(false)
 
             try {
                 // Fetch options
                 const fetchedOptions = await this.getOptionsUsing()
+                if (this.isDestroyed || !this.isOpen || openId !== this.openId)
+                    return
+                this.isLoadingOptions = false
 
                 // Normalize fetched options to an array
                 const normalizedFetched = Array.isArray(fetchedOptions)
@@ -1431,94 +1454,42 @@ export class Select {
                       ? fetchedOptions.options
                       : []
 
-                // Update options
-                this.options = normalizedFetched
                 this.originalOptions = JSON.parse(
                     JSON.stringify(normalizedFetched),
                 )
 
-                // Populate the label repository with the fetched options
-                this.populateLabelRepositoryFromOptions(normalizedFetched)
-
-                // Render options or reapply existing search query if present
-                if (
-                    this.isSearchable &&
-                    this.searchInput &&
-                    ((this.searchInput.value &&
-                        this.searchInput.value.trim() !== '') ||
-                        (this.searchQuery && this.searchQuery.trim() !== ''))
-                ) {
-                    const query = (
-                        this.searchInput.value ||
-                        this.searchQuery ||
-                        ''
-                    )
-                        .trim()
-                        .toLowerCase()
-
-                    // Ensure any loading message is hidden before rendering
-                    this.hideLoadingState()
-                    this.filterOptions(query)
-                } else {
-                    this.renderOptions()
+                // A newer remote query owns its candidates and their labels.
+                if (!this.searchQuery || !this.hasDynamicSearchResults) {
+                    this.populateLabelRepositoryFromOptions(normalizedFetched)
+                    if (this.searchQuery) {
+                        this.filterOptions(this.searchQuery)
+                    } else {
+                        this.options = normalizedFetched
+                        this.renderOptions()
+                        this.positionDropdown()
+                    }
                 }
             } catch (error) {
+                if (this.isDestroyed || !this.isOpen || openId !== this.openId)
+                    return
+                this.isLoadingOptions = false
+                if (
+                    this.searchQuery &&
+                    this.hasDynamicSearchResults &&
+                    searchId !== this.activeSearchId
+                )
+                    return
                 console.error('Error fetching options:', error)
-
-                // Hide loading state
-                this.hideLoadingState()
+                this.showErrorMessage()
             }
         } else if (!this.hasInitialNoOptionsMessage || this.searchQuery) {
             this.hideLoadingState()
         }
-
-        // If searchable, focus the search input
-        if (this.isSearchable && this.searchInput) {
-            // Preserve any existing query; do not reset during or after async load
-            this.searchInput.focus()
-            // If a search query exists, options were already filtered; otherwise they were rendered above.
-        } else {
-            // Focus the first option or the selected option
-            this.selectedIndex = -1
-
-            // Find the index of the selected option
-            const options = this.getVisibleOptions()
-            if (this.isMultiple) {
-                if (Array.isArray(this.state) && this.state.length > 0) {
-                    for (let i = 0; i < options.length; i++) {
-                        if (
-                            this.state.includes(
-                                options[i].getAttribute('data-value'),
-                            )
-                        ) {
-                            this.selectedIndex = i
-                            break
-                        }
-                    }
-                }
-            } else {
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].getAttribute('data-value') === this.state) {
-                        this.selectedIndex = i
-                        break
-                    }
-                }
-            }
-
-            // If no option is selected, focus the first option
-            if (this.selectedIndex === -1 && options.length > 0) {
-                this.selectedIndex = 0
-            }
-
-            // Focus the selected option
-            if (this.selectedIndex >= 0) {
-                options[this.selectedIndex].classList.add('fi-selected')
-                options[this.selectedIndex].focus()
-            }
-        }
     }
 
     positionDropdown() {
+        if (this.isDestroyed || !this.isOpen) return
+        const openId = this.openId
         const placement = this.position === 'top' ? 'top-start' : 'bottom-start'
         const middleware = [
             offset(4), // Add some space between button and dropdown
@@ -1542,6 +1513,8 @@ export class Select {
             middleware: middleware,
             strategy: useFixedPositioning ? 'fixed' : 'absolute',
         }).then(({ x, y }) => {
+            if (this.isDestroyed || !this.isOpen || openId !== this.openId)
+                return
             Object.assign(this.dropdown.style, {
                 left: `${x}px`,
                 top: `${y}px`,
@@ -1552,7 +1525,9 @@ export class Select {
     closeDropdown() {
         this.dropdown.style.display = 'none'
         this.selectButton.setAttribute('aria-expanded', 'false')
+        this.searchInput?.setAttribute('aria-expanded', 'false')
         this.isOpen = false
+        this.openId++
 
         // Cancel any pending debounced search
         if (this.searchTimeout) {
@@ -1563,9 +1538,11 @@ export class Select {
         // Invalidate any in-flight async searches and reset searching state
         this.activeSearchId++
         this.isSearching = false
+        this.isLoadingOptions = false
 
         // Remove any loading / no-results messages
         this.hideLoadingState()
+        this.hideMaxItemsMessage()
 
         // Remove resize listener
         if (this.resizeListener) {
@@ -1579,91 +1556,27 @@ export class Select {
             this.scrollListener = null
         }
 
-        // Remove focus from all options
-        const options = this.getVisibleOptions()
-        options.forEach((option) => {
-            option.classList.remove('fi-selected')
-        })
-
-        // Clear active descendant when closing
-        this.dropdown.removeAttribute('aria-activedescendant')
+        this.setActiveOption(null)
     }
 
     focusNextOption() {
-        const options = this.getVisibleOptions()
+        const options = this.getEnabledOptions()
         if (options.length === 0) return
-
-        // Remove focus from current option
-        if (this.selectedIndex >= 0 && this.selectedIndex < options.length) {
-            options[this.selectedIndex].classList.remove('fi-selected')
-        }
-
-        // If we're at the last option and search input is available, focus the search input
-        if (
-            this.selectedIndex === options.length - 1 &&
-            this.isSearchable &&
-            this.searchInput
-        ) {
-            this.selectedIndex = -1
-            this.searchInput.focus()
-            // Clear aria-activedescendant when focus moves to search input
-            this.dropdown.removeAttribute('aria-activedescendant')
-            return
-        }
-
-        // Focus next option (wrap around to the first option if at the end)
-        this.selectedIndex = (this.selectedIndex + 1) % options.length
-        options[this.selectedIndex].classList.add('fi-selected')
-        options[this.selectedIndex].focus()
-
-        // Set aria-activedescendant to the ID of the focused option
-        if (options[this.selectedIndex].id) {
-            this.dropdown.setAttribute(
-                'aria-activedescendant',
-                options[this.selectedIndex].id,
-            )
-        }
-
-        this.scrollOptionIntoView(options[this.selectedIndex])
+        const index = options.findIndex(
+            (option) => option.dataset.value === this.activeValue,
+        )
+        this.setActiveOption(options[Math.min(index + 1, options.length - 1)])
     }
 
     focusPreviousOption() {
-        const options = this.getVisibleOptions()
+        const options = this.getEnabledOptions()
         if (options.length === 0) return
-
-        // Remove focus from current option
-        if (this.selectedIndex >= 0 && this.selectedIndex < options.length) {
-            options[this.selectedIndex].classList.remove('fi-selected')
-        }
-
-        // If we're at the first option or haven't selected an option yet, focus the search input if available
-        if (
-            (this.selectedIndex === 0 || this.selectedIndex === -1) &&
-            this.isSearchable &&
-            this.searchInput
-        ) {
-            this.selectedIndex = -1
-            this.searchInput.focus()
-            // Clear aria-activedescendant when focus moves to search input
-            this.dropdown.removeAttribute('aria-activedescendant')
-            return
-        }
-
-        // Focus previous option (wrap around to the last option if at the beginning)
-        this.selectedIndex =
-            (this.selectedIndex - 1 + options.length) % options.length
-        options[this.selectedIndex].classList.add('fi-selected')
-        options[this.selectedIndex].focus()
-
-        // Set aria-activedescendant to the ID of the focused option
-        if (options[this.selectedIndex].id) {
-            this.dropdown.setAttribute(
-                'aria-activedescendant',
-                options[this.selectedIndex].id,
-            )
-        }
-
-        this.scrollOptionIntoView(options[this.selectedIndex])
+        const index = options.findIndex(
+            (option) => option.dataset.value === this.activeValue,
+        )
+        this.setActiveOption(
+            options[index < 0 ? options.length - 1 : Math.max(index - 1, 0)],
+        )
     }
 
     scrollOptionIntoView(option) {
@@ -1680,32 +1593,104 @@ export class Select {
     }
 
     getVisibleOptions() {
-        let ungroupedOptions = []
+        return Array.from(this.optionsList.querySelectorAll('[role="option"]'))
+    }
 
-        // Check if optionsList itself has the fi-dropdown-list class (no grouped options case)
-        if (this.optionsList.classList.contains('fi-dropdown-list')) {
-            // Get direct child options when there are no groups
-            ungroupedOptions = Array.from(
-                this.optionsList.querySelectorAll(':scope > li[role="option"]'),
-            )
-        } else {
-            // Get options from nested ungrouped list when there are groups
-            ungroupedOptions = Array.from(
-                this.optionsList.querySelectorAll(
-                    ':scope > ul.fi-dropdown-list > li[role="option"]',
-                ),
-            )
+    getEnabledOptions() {
+        if (
+            this.isSearching ||
+            this.optionsList.hidden ||
+            !this.optionsList.isConnected
+        )
+            return []
+        return this.getVisibleOptions().filter(
+            (option) => option.getAttribute('aria-disabled') !== 'true',
+        )
+    }
+
+    getFocusOwner() {
+        return this.searchInput ?? this.selectButton
+    }
+
+    setActiveOption(option) {
+        this.activeValue = option?.dataset.value ?? null
+        this.getVisibleOptions().forEach((candidate) =>
+            candidate.classList.toggle('fi-selected', candidate === option),
+        )
+        this.syncActiveDescendant()
+        if (option && this.isOpen) this.scrollOptionIntoView(option)
+    }
+
+    syncActiveDescendant() {
+        this.selectButton.removeAttribute('aria-activedescendant')
+        this.searchInput?.removeAttribute('aria-activedescendant')
+        const owner = this.getFocusOwner()
+        if (!this.isOpen || document.activeElement !== owner) return
+        const option = this.getEnabledOptions().find(
+            (option) => option.dataset.value === this.activeValue,
+        )
+        if (option) owner.setAttribute('aria-activedescendant', option.id)
+    }
+
+    setAccessibilityAttributes(attributes) {
+        this.accessibilityAttributes = attributes
+        for (const name of [
+            'aria-label',
+            'aria-labelledby',
+            'aria-describedby',
+            'aria-invalid',
+            'aria-busy',
+            'aria-required',
+        ]) {
+            const value = attributes[name]
+            for (const control of [this.selectButton, this.searchInput].filter(
+                Boolean,
+            )) {
+                if (filled(value)) control.setAttribute(name, value)
+                else control.removeAttribute(name)
+            }
         }
 
-        // Get all option elements that are in option groups
-        const groupOptions = Array.from(
-            this.optionsList.querySelectorAll(
-                'li.fi-select-input-option-group > ul > li[role="option"]',
-            ),
+        if (
+            !this.selectButton.hasAttribute('aria-label') &&
+            !this.selectButton.hasAttribute('aria-labelledby') &&
+            filled(this.ariaLabel)
+        ) {
+            this.selectButton.setAttribute('aria-label', this.ariaLabel)
+        }
+        const label =
+            (this.selectButton.getAttribute('aria-labelledby') ?? '')
+                .split(/\s+/)
+                .map((id) => document.getElementById(id)?.textContent ?? '')
+                .join(' ')
+                .trim() ||
+            this.selectButton.getAttribute('aria-label') ||
+            Array.from(
+                this.selectButton.labels ?? [],
+                (label) => label.textContent,
+            )
+                .join(' ')
+                .trim()
+        this.optionsList.setAttribute('aria-label', label)
+        if (this.isSearchable) {
+            this.searchInput.removeAttribute('aria-labelledby')
+            this.searchInput.setAttribute(
+                'aria-label',
+                `${label}: ${this.searchLabel}`,
+            )
+            this.selectButton.removeAttribute('aria-required')
+        }
+        const descriptions = [
+            attributes['aria-describedby'],
+            this.selectionSummary.id,
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .split(/\s+/)
+        this.selectButton.setAttribute(
+            'aria-describedby',
+            [...new Set(descriptions)].join(' '),
         )
-
-        // Combine and return all options
-        return [...ungroupedOptions, ...groupOptions]
     }
 
     getSelectedOptionLabels() {
@@ -1743,8 +1728,12 @@ export class Select {
     }
 
     handleSearch(event) {
+        if (this.isDestroyed || !this.isOpen) return
         const query = event.target.value.trim()
         this.searchQuery = query
+        this.hasOptionsError = false
+        const searchId = ++this.activeSearchId
+        this.setActiveOption(null)
 
         // Clear any existing timeout
         if (this.searchTimeout) {
@@ -1753,8 +1742,15 @@ export class Select {
 
         // If query is empty, restore original options and exit early
         if (query === '') {
+            this.isSearching = false
+            if (this.isLoadingOptions) {
+                this.showLoadingState()
+                return
+            }
+            this.hideLoadingState()
             this.options = JSON.parse(JSON.stringify(this.originalOptions))
             this.renderOptions()
+            this.positionDropdown()
             return
         }
 
@@ -1764,28 +1760,28 @@ export class Select {
             typeof this.getSearchResultsUsing !== 'function' ||
             !this.hasDynamicSearchResults
         ) {
+            this.isSearching = false
             this.filterOptions(query)
             return
         }
 
-        // Handle server-side search with debounce
+        // Old results are not candidates for the new query, including during debounce.
+        this.isSearching = true
+        this.showLoadingState(true)
         this.searchTimeout = setTimeout(async () => {
             // Clear the timeout handle immediately to avoid stale truthy checks
             this.searchTimeout = null
 
-            // Increment the active search token to invalidate any in-flight previous searches
-            const searchId = ++this.activeSearchId
-            this.isSearching = true
-
             try {
-                // Show searching state
-                this.showLoadingState(true)
-
                 // Get search results from backend
                 const results = await this.getSearchResultsUsing(query)
 
                 // If this search is no longer the latest or the dropdown is closed, ignore the results
-                if (searchId !== this.activeSearchId || !this.isOpen) {
+                if (
+                    this.isDestroyed ||
+                    searchId !== this.activeSearchId ||
+                    !this.isOpen
+                ) {
                     return
                 }
 
@@ -1803,6 +1799,7 @@ export class Select {
                 this.populateLabelRepositoryFromOptions(normalizedResults)
 
                 // Hide loading state and render options
+                this.isSearching = false
                 this.hideLoadingState()
                 this.renderOptions()
 
@@ -1817,15 +1814,14 @@ export class Select {
                 }
             } catch (error) {
                 // If this search is obsolete, silence errors to avoid noisy logs on cancellation
-                if (searchId === this.activeSearchId) {
+                if (
+                    !this.isDestroyed &&
+                    this.isOpen &&
+                    searchId === this.activeSearchId
+                ) {
                     console.error('Error fetching search results:', error)
 
-                    // Hide loading state and restore original options
-                    this.hideLoadingState()
-                    this.options = JSON.parse(
-                        JSON.stringify(this.originalOptions),
-                    )
-                    this.renderOptions()
+                    this.showErrorMessage()
                 }
             } finally {
                 if (searchId === this.activeSearchId) {
@@ -1836,13 +1832,12 @@ export class Select {
     }
 
     showLoadingState(isSearching = false) {
-        // If the options list is in the DOM, remove it to avoid rendering an empty list
-        if (this.optionsList.parentNode === this.dropdown) {
-            this.dropdown.removeChild(this.optionsList)
-        }
+        this.setActiveOption(null)
+        this.optionsList.hidden = true
 
         // Remove any existing message
         this.hideLoadingState()
+        this.optionsList.setAttribute('aria-busy', 'true')
 
         // Add loading message
         const loadingItem = document.createElement('div')
@@ -1851,23 +1846,32 @@ export class Select {
             ? this.searchingMessage
             : this.loadingMessage
         this.dropdown.appendChild(loadingItem)
+
+        // Announce the message to screen readers, unless the dropdown is closed,
+        // such as when rendering the initial options on page load
+        if (this.isOpen) {
+            this.statusRegion.textContent = loadingItem.textContent
+        }
+
+        this.positionDropdown()
     }
 
     hideLoadingState() {
+        this.optionsList.removeAttribute('aria-busy')
         // Remove loading message
         const loadingItem = this.dropdown.querySelector(
             '.fi-select-input-message',
         )
         if (loadingItem) {
             loadingItem.remove()
+
+            this.statusRegion.textContent = ''
         }
     }
 
     showNoOptionsMessage() {
-        // Ensure the options list is not rendered empty while showing the message
-        if (this.optionsList.parentNode === this.dropdown) {
-            this.dropdown.removeChild(this.optionsList)
-        }
+        this.setActiveOption(null)
+        this.optionsList.hidden = true
 
         // Remove any existing message
         this.hideLoadingState()
@@ -1877,13 +1881,17 @@ export class Select {
         noOptionsItem.className = 'fi-select-input-message'
         noOptionsItem.textContent = this.noOptionsMessage
         this.dropdown.appendChild(noOptionsItem)
+
+        // Announce the message to screen readers, unless the dropdown is closed,
+        // such as when rendering the initial options on page load
+        if (this.isOpen) {
+            this.statusRegion.textContent = this.noOptionsMessage
+        }
     }
 
     showNoResultsMessage() {
-        // Ensure the options list is not rendered empty while showing the message
-        if (this.optionsList.parentNode === this.dropdown) {
-            this.dropdown.removeChild(this.optionsList)
-        }
+        this.setActiveOption(null)
+        this.optionsList.hidden = true
 
         // Remove any existing message
         this.hideLoadingState()
@@ -1893,13 +1901,66 @@ export class Select {
         noResultsItem.className = 'fi-select-input-message'
         noResultsItem.textContent = this.noSearchResultsMessage
         this.dropdown.appendChild(noResultsItem)
+
+        // Announce the message to screen readers, unless the dropdown is closed,
+        // such as when rendering the initial options on page load
+        if (this.isOpen) {
+            this.statusRegion.textContent = this.noSearchResultsMessage
+        }
+    }
+
+    showErrorMessage() {
+        this.hasOptionsError = true
+        this.showLoadingState()
+        this.optionsList.removeAttribute('aria-busy')
+        this.dropdown.querySelector('.fi-select-input-message').textContent =
+            this.errorMessage
+        this.statusRegion.textContent = this.errorMessage
+        this.positionDropdown()
+    }
+
+    showMaxItemsMessage() {
+        // Remove any existing message so it is re-inserted in the correct position
+        this.hideMaxItemsMessage()
+
+        this.maxItemsMessageElement = document.createElement('div')
+        this.maxItemsMessageElement.className =
+            'fi-select-input-max-items-message'
+        this.maxItemsMessageElement.textContent = this.maxItemsMessage
+
+        // Insert the message above the options list so it is visible without scrolling
+        if (this.optionsList.parentNode === this.dropdown) {
+            this.dropdown.insertBefore(
+                this.maxItemsMessageElement,
+                this.optionsList,
+            )
+        } else {
+            this.dropdown.appendChild(this.maxItemsMessageElement)
+        }
+
+        // Announce the message to screen readers
+        this.statusRegion.textContent = this.maxItemsMessage
+    }
+
+    hideMaxItemsMessage() {
+        if (!this.maxItemsMessageElement) {
+            return
+        }
+
+        this.maxItemsMessageElement.remove()
+        this.maxItemsMessageElement = null
+
+        // Clear the announcement so reaching the limit again re-announces the same text
+        if (this.statusRegion.textContent === this.maxItemsMessage) {
+            this.statusRegion.textContent = ''
+        }
     }
 
     filterOptions(query) {
         const searchInLabel = this.searchableOptionFields.includes('label')
         const searchInValue = this.searchableOptionFields.includes('value')
 
-        query = query.toLowerCase()
+        query = normalizeSearchString(query)
 
         const filteredOptions = []
 
@@ -1911,13 +1972,13 @@ export class Select {
                         // Check if the option matches the search query in any of the specified fields
                         return (
                             (searchInLabel &&
-                                groupOption.label
-                                    .toLowerCase()
-                                    .includes(query)) ||
+                                normalizeSearchString(
+                                    groupOption.label,
+                                ).includes(query)) ||
                             (searchInValue &&
-                                String(groupOption.value)
-                                    .toLowerCase()
-                                    .includes(query))
+                                normalizeSearchString(
+                                    String(groupOption.value),
+                                ).includes(query))
                         )
                     },
                 )
@@ -1929,9 +1990,10 @@ export class Select {
                     })
                 }
             } else if (
-                (searchInLabel && option.label.toLowerCase().includes(query)) ||
+                (searchInLabel &&
+                    normalizeSearchString(option.label).includes(query)) ||
                 (searchInValue &&
-                    String(option.value).toLowerCase().includes(query))
+                    normalizeSearchString(String(option.value)).includes(query))
             ) {
                 // This is a regular option
                 filteredOptions.push(option)
@@ -1942,11 +2004,6 @@ export class Select {
 
         // Render filtered options
         this.renderOptions()
-
-        // If no options found, show "No results" message
-        if (this.options.length === 0) {
-            this.showNoResultsMessage()
-        }
 
         // Reevaluate dropdown position after search results are updated
         if (this.isOpen) {
@@ -1961,12 +2018,15 @@ export class Select {
         }
 
         if (!this.isMultiple) {
+            const shouldRestoreFocus = this.container.contains(
+                document.activeElement,
+            )
             // For single selection - simpler case, handle first
             this.state = value
             this.updateSelectedDisplay()
             this.renderOptions()
             this.closeDropdown()
-            this.selectButton.focus()
+            if (shouldRestoreFocus) this.selectButton.focus()
             this.onStateChange(this.state)
             return
         }
@@ -1976,35 +2036,13 @@ export class Select {
 
         // If already selected, remove the value
         if (newState.includes(value)) {
-            // Find and remove the badge directly from the DOM
-            const badgeToRemove = this.selectedDisplay.querySelector(
-                `[data-value="${value}"]`,
+            this.state = newState.filter(
+                (selectedValue) => selectedValue !== value,
             )
-            if (filled(badgeToRemove)) {
-                // Check if this is the last badge
-                const badgesContainer = badgeToRemove.parentElement
-                if (
-                    filled(badgesContainer) &&
-                    badgesContainer.children.length === 1
-                ) {
-                    // If this is the last badge, we need to update the display to show the placeholder
-                    newState = newState.filter((v) => v !== value)
-                    this.state = newState
-                    this.updateSelectedDisplay()
-                } else {
-                    // Otherwise, just remove this badge
-                    badgeToRemove.remove()
+            this.updateSelectedDisplay()
 
-                    // Update the state
-                    newState = newState.filter((v) => v !== value)
-                    this.state = newState
-                }
-            } else {
-                // If we couldn't find the badge, fall back to full update
-                newState = newState.filter((v) => v !== value)
-                this.state = newState
-                this.updateSelectedDisplay()
-            }
+            // An item was deselected, so any previous limit message is stale
+            this.hideMaxItemsMessage()
 
             this.renderOptions()
 
@@ -2014,35 +2052,28 @@ export class Select {
             }
 
             this.maintainFocusInMultipleMode()
+            this.updateSelectionSummary()
             this.onStateChange(this.state)
             return
         }
 
         // Check if maxItems limit has been reached
         if (this.maxItems && newState.length >= this.maxItems) {
-            // Show a message or alert about reaching the limit
+            // Show and announce a message about reaching the limit, without a blocking `alert()`
             if (this.maxItemsMessage) {
-                alert(this.maxItemsMessage)
+                this.showMaxItemsMessage()
             }
             return // Don't add more items
         }
+
+        // A new item can be selected, so any previous limit message is stale
+        this.hideMaxItemsMessage()
 
         // Add the new value
         newState.push(value)
         this.state = newState
 
-        // Check if we already have a badges container
-        const existingBadgesContainer = this.selectedDisplay.querySelector(
-            '.fi-select-input-value-badges-ctn',
-        )
-
-        if (blank(existingBadgesContainer)) {
-            // If no badges container exists, we need to do a full update
-            this.updateSelectedDisplay()
-        } else {
-            // Otherwise, just add a new badge to the existing container
-            this.addSingleBadge(value, existingBadgesContainer)
-        }
+        this.updateSelectedDisplay()
 
         this.renderOptions()
 
@@ -2055,90 +2086,11 @@ export class Select {
         this.onStateChange(this.state)
     }
 
-    // Helper method to add a single badge for a value
-    async addSingleBadge(value, badgesContainer) {
-        // First check if we have the label in the repository
-        let label = this.labelRepository[value]
-
-        // If not in repository, try to find it in the options
-        if (blank(label)) {
-            label = this.getSelectedOptionLabel(value)
-
-            // If found in options, store it in the repository
-            if (filled(label)) {
-                this.labelRepository[value] = label
-            }
-        }
-
-        // If label not found and getOptionLabelsUsing is available, fetch it
-        if (blank(label) && this.getOptionLabelsUsing) {
-            try {
-                // Fetch labels for this value - returns array of {label, value} objects
-                const fetchedOptionsArray = await this.getOptionLabelsUsing()
-
-                // Find the matching option
-                for (const option of fetchedOptionsArray) {
-                    if (
-                        filled(option) &&
-                        option.value === value &&
-                        option.label !== undefined
-                    ) {
-                        label = option.label
-                        // Store the fetched label in the repository
-                        this.labelRepository[value] = label
-                        break
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching option label:', error)
-            }
-        }
-
-        // If still no label, use the value as fallback
-        if (blank(label)) {
-            label = value
-        }
-
-        // Create and add the badge
-        const badge = this.createBadgeElement(value, label)
-        badgesContainer.appendChild(badge)
-    }
-
     // Helper method to maintain focus in multiple selection mode
     maintainFocusInMultipleMode() {
-        if (this.isSearchable && this.searchInput) {
-            // If searchable, focus the search input
-            this.searchInput.focus()
-            return
+        if (this.isOpen && this.container.contains(document.activeElement)) {
+            this.getFocusOwner().focus()
         }
-
-        // Otherwise, focus the first option or the selected option
-        const options = this.getVisibleOptions()
-        if (options.length === 0) {
-            return
-        }
-
-        // Find the index of the selected option
-        this.selectedIndex = -1
-        if (Array.isArray(this.state) && this.state.length > 0) {
-            for (let i = 0; i < options.length; i++) {
-                if (
-                    this.state.includes(options[i].getAttribute('data-value'))
-                ) {
-                    this.selectedIndex = i
-                    break
-                }
-            }
-        }
-
-        // If no option is selected, focus the first option
-        if (this.selectedIndex === -1) {
-            this.selectedIndex = 0
-        }
-
-        // Focus the selected option
-        options[this.selectedIndex].classList.add('fi-selected')
-        options[this.selectedIndex].focus()
     }
 
     disable() {
@@ -2161,6 +2113,8 @@ export class Select {
     }
 
     applyDisabledState() {
+        this.badgesSortable?.option('disabled', this.isDisabled)
+
         if (this.isDisabled) {
             // Add disabled attribute and class to the select button
             this.selectButton.setAttribute('disabled', 'disabled')
@@ -2170,7 +2124,7 @@ export class Select {
             // If there are remove buttons in multiple mode, disable them
             if (this.isMultiple) {
                 const removeButtons = this.container.querySelectorAll(
-                    '.fi-select-input-badge-remove',
+                    '.fi-badge-delete-btn',
                 )
                 removeButtons.forEach((button) => {
                     button.setAttribute('disabled', 'disabled')
@@ -2203,7 +2157,7 @@ export class Select {
             // If there are remove buttons in multiple mode, enable them
             if (this.isMultiple) {
                 const removeButtons = this.container.querySelectorAll(
-                    '.fi-select-input-badge-remove',
+                    '.fi-badge-delete-btn',
                 )
                 removeButtons.forEach((button) => {
                     button.removeAttribute('disabled')
@@ -2218,7 +2172,7 @@ export class Select {
                 )
                 if (removeButton) {
                     removeButton.removeAttribute('disabled')
-                    removeButton.classList.add('fi-disabled')
+                    removeButton.classList.remove('fi-disabled')
                 }
             }
 
@@ -2231,6 +2185,12 @@ export class Select {
     }
 
     destroy() {
+        this.isDestroyed = true
+        this.openId++
+        this.activeSearchId++
+        this.selectedDisplayVersion++
+        this.destroyBadgesSortable()
+
         // Remove button click event listener
         if (this.selectButton && this.buttonClickListener) {
             this.selectButton.removeEventListener(
@@ -2257,6 +2217,13 @@ export class Select {
             this.dropdown.removeEventListener(
                 'keydown',
                 this.dropdownKeydownListener,
+            )
+        }
+
+        if (this.dropdownEscapeListener) {
+            this.element.removeEventListener(
+                'dropdown-escape',
+                this.dropdownEscapeListener,
             )
         }
 
@@ -2295,5 +2262,92 @@ export class Select {
         if (this.container) {
             this.container.remove()
         }
+    }
+}
+
+export function createSelectOptionRequestHandler() {
+    let isDestroyed = false
+    const pendingRequests = new Set()
+
+    const request = (livewire, method, parameters, argumentsObject = {}) => {
+        // A fresh arguments object identifies this invocation, even for identical queries.
+        const requestParameters = [...parameters, { ...argumentsObject }]
+        let unsubscribe = null
+        let cancel
+
+        return new Promise((resolve, reject) => {
+            let isSettled = false
+
+            const finish = (callback, value) => {
+                if (isSettled) return
+                isSettled = true
+                unsubscribe?.()
+                unsubscribe = null
+                pendingRequests.delete(cancel)
+                callback(value)
+            }
+
+            cancel = () =>
+                finish(
+                    reject,
+                    new Error('Select option request was cancelled.'),
+                )
+            pendingRequests.add(cancel)
+
+            if (isDestroyed) {
+                cancel()
+                return
+            }
+
+            unsubscribe = Livewire.hook(
+                'commit',
+                ({ component, commit, fail }) => {
+                    if (
+                        component.id !== livewire.$id ||
+                        !commit.calls.some(
+                            (call) =>
+                                call.method === method &&
+                                call.params.length ===
+                                    requestParameters.length &&
+                                call.params.every(
+                                    (parameter, index) =>
+                                        parameter === requestParameters[index],
+                                ),
+                        )
+                    )
+                        return
+
+                    unsubscribe?.()
+                    unsubscribe = null
+                    fail(() =>
+                        finish(
+                            reject,
+                            new Error('Select option request failed.'),
+                        ),
+                    )
+                },
+            )
+
+            try {
+                Promise.resolve(livewire[method](...requestParameters)).then(
+                    (value) => finish(resolve, value),
+                    (error) => finish(reject, error),
+                )
+            } catch (error) {
+                finish(reject, error)
+            }
+        })
+    }
+
+    return {
+        wrap: (callback) =>
+            typeof callback === 'function'
+                ? (...callbackArguments) =>
+                      callback(...callbackArguments, request)
+                : callback,
+        destroy() {
+            isDestroyed = true
+            for (const cancel of pendingRequests) cancel()
+        },
     }
 }

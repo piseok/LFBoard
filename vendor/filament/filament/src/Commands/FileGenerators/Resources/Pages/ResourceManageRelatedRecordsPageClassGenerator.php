@@ -11,6 +11,7 @@ use Filament\Resources\Pages\ManageRelatedRecords;
 use Filament\Schemas\Schema;
 use Filament\Support\Commands\Concerns\CanReadModelSchemas;
 use Filament\Support\Commands\FileGenerators\ClassGenerator;
+use Filament\Support\Commands\FileGenerators\Contracts\HasSkippedColumns;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
@@ -25,7 +26,7 @@ use Nette\PhpGenerator\Literal;
 use Nette\PhpGenerator\Method;
 use Nette\PhpGenerator\Property;
 
-class ResourceManageRelatedRecordsPageClassGenerator extends ClassGenerator
+class ResourceManageRelatedRecordsPageClassGenerator extends ClassGenerator implements HasSkippedColumns
 {
     use CanGenerateResourceForms;
     use CanGenerateResourceProperty;
@@ -202,14 +203,22 @@ class ResourceManageRelatedRecordsPageClassGenerator extends ClassGenerator
                 return {$this->simplifyFqn($infolistSchemaFqn)}::configure(\$schema);
                 PHP;
         } else {
-            $this->importUnlessPartial(TextEntry::class);
+            $components = '//';
 
-            $methodBody = new Literal(<<<PHP
+            if (filled($recordTitleAttribute = $this->getRecordTitleAttribute())) {
+                $this->importUnlessPartial(TextEntry::class);
+
+                $components = new Literal(<<<PHP
+                    {$this->simplifyFqn(TextEntry::class)}::make(?),
+                    PHP, [$recordTitleAttribute]);
+            }
+
+            $methodBody = <<<PHP
                 return \$schema
                     ->components([
-                        {$this->simplifyFqn(TextEntry::class)}::make(?),
+                        {$components}
                     ]);
-                PHP, [$this->getRecordTitleAttribute()]);
+                PHP;
         }
 
         $method = $class->addMethod('infolist')

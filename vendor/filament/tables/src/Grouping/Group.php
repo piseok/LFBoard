@@ -46,6 +46,11 @@ class Group extends Component
 
     protected bool $isDate = false;
 
+    /**
+     * @var array<string, string | Htmlable | null>
+     */
+    protected array $cachedTitles = [];
+
     protected string $evaluationIdentifier = 'group';
 
     final public function __construct(?string $id = null)
@@ -233,6 +238,10 @@ class Group extends Component
             $key = $key->toDateString();
         }
 
+        if (is_bool($key)) {
+            $key = (int) $key;
+        }
+
         return filled($key) ? strval($key) : null;
     }
 
@@ -263,7 +272,25 @@ class Group extends Component
     /**
      * @param  Model | array<string, mixed>  $record
      */
-    public function getTitle(Model | array $record): string | Htmlable | null
+    public function getTitle(Model | array $record, ?string $key = null): string | Htmlable | null
+    {
+        if ($this->getTitleFromRecordUsing) {
+            return $this->resolveTitle($record);
+        }
+
+        $key ??= $this->getStringKey($record);
+
+        if (! array_key_exists($key, $this->cachedTitles)) {
+            $this->cachedTitles[$key] = $this->resolveTitle($record);
+        }
+
+        return $this->cachedTitles[$key];
+    }
+
+    /**
+     * @param  Model | array<string, mixed>  $record
+     */
+    protected function resolveTitle(Model | array $record): string | Htmlable | null
     {
         $column = $this->getColumn();
 
@@ -385,10 +412,14 @@ class Group extends Component
         }
 
         if ($relationshipName = $this->getRelationshipName()) {
-            return $query->whereHas(
-                $relationshipName,
-                fn (EloquentBuilder $query) => $this->applyDefaultScopeToQuery($query, $this->getRelationshipAttribute(), $key),
-            )->when(blank($key), fn (EloquentBuilder $query) => $query->orWhereDoesntHave($relationshipName));
+            return $query->where(
+                fn (EloquentBuilder $query) => $query
+                    ->whereHas(
+                        $relationshipName,
+                        fn (EloquentBuilder $query) => $this->applyDefaultScopeToQuery($query, $this->getRelationshipAttribute(), $key),
+                    )
+                    ->when(blank($key), fn (EloquentBuilder $query) => $query->orWhereDoesntHave($relationshipName)),
+            );
         }
 
         return $this->applyDefaultScopeToQuery($query, $column, $key);

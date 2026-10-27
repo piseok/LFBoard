@@ -2,6 +2,8 @@
 
 namespace Filament\Schemas;
 
+use Closure;
+use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Testing\TestsSchemas;
 use Filament\Support\Assets\AlpineComponent;
 use Filament\Support\Assets\Js;
@@ -47,6 +49,18 @@ class SchemasServiceProvider extends PackageServiceProvider
 
         Testable::mixin(new TestsSchemas);
 
+        on('call', function (object $component, string $method): void {
+            if (! in_array($method, ['validate', 'validateOnly'], strict: true)) {
+                return;
+            }
+
+            if (! ($component instanceof HasSchemas)) {
+                return;
+            }
+
+            abort(403);
+        });
+
         on('call', function (object $component, string $method, array $params): void {
             if (! in_array($method, ['_startUpload', '_finishUpload'], strict: true)) {
                 return;
@@ -61,6 +75,14 @@ class SchemasServiceProvider extends PackageServiceProvider
             }
 
             abort_unless($component->isFileUploadForSchemaComponent($params[0] ?? ''), 403);
+        });
+
+        on('call', function (object $component, string $method, array $params): ?Closure {
+            if (($method !== '_uploadErrored') || ! method_exists($component, 'handleFileUploadValidationError')) {
+                return null;
+            }
+
+            return static fn () => $component->handleFileUploadValidationError($params['name'] ?? $params[0]);
         });
     }
 }

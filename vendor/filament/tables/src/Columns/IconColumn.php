@@ -6,10 +6,12 @@ use BackedEnum;
 use Closure;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\CanWrap;
+use Filament\Support\Contracts\HasLabel as LabelInterface;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\IconSize;
 use Filament\Support\Facades\FilamentIcon;
 use Filament\Support\Icons\Heroicon;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Tables\View\Components\Columns\IconColumnComponent\IconComponent;
 use Filament\Tables\View\TablesIconAlias;
 use Illuminate\Contracts\Support\Arrayable;
@@ -18,7 +20,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Js;
-use Illuminate\View\ComponentAttributeBag;
+use Stringable;
 
 use function Filament\Support\generate_href_html;
 use function Filament\Support\generate_icon_html;
@@ -146,10 +148,11 @@ class IconColumn extends Column implements HasEmbeddedView
         return $this;
     }
 
-    public function getSize(mixed $state): IconSize | string | null
+    public function getSize(mixed $state, ?Model $relatedRecord = null): IconSize | string | null
     {
         $size = $this->evaluate($this->size, [
             'state' => $state,
+            'relatedRecord' => $relatedRecord,
         ]);
 
         if (blank($size)) {
@@ -167,13 +170,13 @@ class IconColumn extends Column implements HasEmbeddedView
         return $size;
     }
 
-    public function getIcon(mixed $state): string | BackedEnum | Htmlable | null
+    public function getIcon(mixed $state, ?Model $relatedRecord = null): string | BackedEnum | Htmlable | null
     {
-        if (filled($icon = $this->getBaseIcon($state))) {
+        if (filled($icon = $this->getBaseIcon($state, $relatedRecord))) {
             return $icon;
         }
 
-        if (! $this->isBoolean()) {
+        if (! $this->isBoolean($state, $relatedRecord)) {
             return null;
         }
 
@@ -181,19 +184,19 @@ class IconColumn extends Column implements HasEmbeddedView
             return null;
         }
 
-        return $state ? $this->getTrueIcon() : $this->getFalseIcon();
+        return $state ? $this->getTrueIcon($state, $relatedRecord) : $this->getFalseIcon($state, $relatedRecord);
     }
 
     /**
      * @return string | array<int | string, string | int> | null
      */
-    public function getColor(mixed $state): string | array | null
+    public function getColor(mixed $state, ?Model $relatedRecord = null): string | array | null
     {
-        if (filled($color = $this->getBaseColor($state))) {
+        if (filled($color = $this->getBaseColor($state, $relatedRecord))) {
             return $color;
         }
 
-        if (! $this->isBoolean()) {
+        if (! $this->isBoolean($state, $relatedRecord)) {
             return null;
         }
 
@@ -201,20 +204,26 @@ class IconColumn extends Column implements HasEmbeddedView
             return null;
         }
 
-        return $state ? $this->getTrueColor() : $this->getFalseColor();
+        return $state ? $this->getTrueColor($state, $relatedRecord) : $this->getFalseColor($state, $relatedRecord);
     }
 
     /**
      * @return string | array<string>
      */
-    public function getFalseColor(): string | array
+    public function getFalseColor(mixed $state = null, ?Model $relatedRecord = null): string | array
     {
-        return $this->evaluate($this->falseColor) ?? 'danger';
+        return $this->evaluate(
+            $this->falseColor,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        ) ?? 'danger';
     }
 
-    public function getFalseIcon(): string | BackedEnum | Htmlable | null
+    public function getFalseIcon(mixed $state = null, ?Model $relatedRecord = null): string | BackedEnum | Htmlable | null
     {
-        $icon = $this->evaluate($this->falseIcon);
+        $icon = $this->evaluate(
+            $this->falseIcon,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
 
         if ($icon === false) {
             return null;
@@ -228,14 +237,20 @@ class IconColumn extends Column implements HasEmbeddedView
     /**
      * @return string | array<string>
      */
-    public function getTrueColor(): string | array
+    public function getTrueColor(mixed $state = null, ?Model $relatedRecord = null): string | array
     {
-        return $this->evaluate($this->trueColor) ?? 'success';
+        return $this->evaluate(
+            $this->trueColor,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        ) ?? 'success';
     }
 
-    public function getTrueIcon(): string | BackedEnum | Htmlable | null
+    public function getTrueIcon(mixed $state = null, ?Model $relatedRecord = null): string | BackedEnum | Htmlable | null
     {
-        $icon = $this->evaluate($this->trueIcon);
+        $icon = $this->evaluate(
+            $this->trueIcon,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
 
         if ($icon === false) {
             return null;
@@ -246,7 +261,7 @@ class IconColumn extends Column implements HasEmbeddedView
             ?? Heroicon::OutlinedCheckCircle;
     }
 
-    public function isBoolean(): bool
+    public function isBoolean(mixed $state = null, ?Model $relatedRecord = null): bool
     {
         if (blank($this->isBoolean)) {
             $record = $this->getRecord();
@@ -254,7 +269,10 @@ class IconColumn extends Column implements HasEmbeddedView
             $this->isBoolean = ($record instanceof Model) && $this->getRecord()->hasCast($this->getName(), ['bool', 'boolean']);
         }
 
-        return (bool) $this->evaluate($this->isBoolean);
+        return (bool) $this->evaluate(
+            $this->isBoolean,
+            $this->getStateEvaluationParameters($state, $relatedRecord, hasState: func_num_args() > 0),
+        );
     }
 
     public function isListWithLineBreaks(): bool
@@ -307,6 +325,7 @@ class IconColumn extends Column implements HasEmbeddedView
         }
 
         $state = Arr::wrap($state);
+        $relatedRecords = $this->getRelatedRecordsForState($state);
 
         $attributes = $attributes
             ->class([
@@ -316,19 +335,19 @@ class IconColumn extends Column implements HasEmbeddedView
 
         $shouldOpenUrlInNewTab = $this->shouldOpenUrlInNewTab();
 
-        $formatState = function (mixed $stateItem) use ($shouldOpenUrlInNewTab): string {
-            $icon = $this->getIcon($stateItem);
+        $formatState = function (mixed $stateItem, ?Model $relatedRecord) use ($shouldOpenUrlInNewTab): string {
+            $icon = $this->getIcon($stateItem, $relatedRecord);
 
             if (blank($icon)) {
                 return '';
             }
 
-            $color = $this->getColor($stateItem);
-            $size = $this->getSize($stateItem);
+            $color = $this->getColor($stateItem, $relatedRecord);
+            $size = $this->getSize($stateItem, $relatedRecord);
 
-            $item = generate_icon_html($icon, attributes: (new ComponentAttributeBag)
+            $item = generate_icon_html($icon, attributes: (new FilamentComponentAttributeBag)
                 ->merge([
-                    'x-tooltip' => filled($tooltip = $this->getTooltip($stateItem))
+                    'x-tooltip' => filled($tooltip = $this->getTooltip($stateItem, $relatedRecord))
                         ? '{
                             content: ' . Js::from($tooltip) . ',
                             theme: $store.theme,
@@ -339,7 +358,24 @@ class IconColumn extends Column implements HasEmbeddedView
                 ->color(IconComponent::class, $color), size: $size ?? IconSize::Large)
                 ->toHtml();
 
-            if (filled($url = $this->getUrl($stateItem))) {
+            // The icon is hidden from assistive technology, so a text alternative is
+            // rendered alongside it. It also gives any `<a>` / `<button>` wrapping the
+            // cell's content an accessible name.
+            $stateItemTextAlternative = match (true) {
+                filled($tooltip) => $tooltip,
+                $this->isBoolean($stateItem, $relatedRecord) => __('filament-tables::table.columns.icon.boolean.' . ($stateItem ? 'true' : 'false')),
+                $stateItem instanceof LabelInterface => $stateItem->getLabel(),
+                $stateItem instanceof BackedEnum => $stateItem->value,
+                $stateItem instanceof Htmlable => strip_tags($stateItem->toHtml()),
+                is_scalar($stateItem) || $stateItem instanceof Stringable => $stateItem,
+                default => null,
+            };
+
+            if (filled($stateItemTextAlternative)) {
+                $item .= '<span class="fi-sr-only">' . e(trim(strip_tags((string) $stateItemTextAlternative))) . '</span>';
+            }
+
+            if (filled($url = $this->getUrl($stateItem, $relatedRecord))) {
                 $item = '<a ' . generate_href_html($url, $shouldOpenUrlInNewTab)->toHtml() . '>' . $item . '</a>';
             }
 
@@ -349,8 +385,8 @@ class IconColumn extends Column implements HasEmbeddedView
         ob_start(); ?>
 
         <div <?= $attributes->toHtml() ?>>
-            <?php foreach ($state as $stateItem) { ?>
-                <?= $formatState($stateItem) ?>
+            <?php foreach ($state as $stateItemIndex => $stateItem) { ?>
+                <?= $formatState($stateItem, $relatedRecords[$stateItemIndex] ?? null) ?>
             <?php } ?>
         </div>
 

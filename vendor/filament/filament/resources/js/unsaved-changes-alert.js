@@ -1,5 +1,9 @@
-window.setUpUnsavedDataChangesAlert = ({ body, livewireComponent, $wire }) => {
-    window.addEventListener('beforeunload', (event) => {
+window.setUpFilamentUnsavedDataChangesAlert = ({
+    body,
+    livewireComponent,
+    $wire,
+}) => {
+    const beforeUnloadHandler = (event) => {
         if (
             window.jsMd5(JSON.stringify($wire.data).replace(/\\/g, '')) ===
                 $wire.savedDataHash ||
@@ -10,10 +14,16 @@ window.setUpUnsavedDataChangesAlert = ({ body, livewireComponent, $wire }) => {
 
         event.preventDefault()
         event.returnValue = true
-    })
+    }
+
+    window.addEventListener('beforeunload', beforeUnloadHandler)
+
+    $wire.__instance.addCleanup(() =>
+        window.removeEventListener('beforeunload', beforeUnloadHandler),
+    )
 }
 
-window.setUpSpaModeUnsavedDataChangesAlert = ({
+window.setUpFilamentSpaModeUnsavedDataChangesAlert = ({
     body,
     resolveLivewireComponentUsing,
     $wire,
@@ -33,7 +43,7 @@ window.setUpSpaModeUnsavedDataChangesAlert = ({
         return confirm(body)
     }
 
-    document.addEventListener('livewire:navigate', (event) => {
+    const navigateHandler = (event) => {
         if (typeof resolveLivewireComponentUsing() !== 'undefined') {
             if (!shouldPreventNavigation()) {
                 return
@@ -45,29 +55,39 @@ window.setUpSpaModeUnsavedDataChangesAlert = ({
 
             event.preventDefault()
         }
-    })
+    }
 
-    window.addEventListener('beforeunload', (event) => {
+    const beforeUnloadHandler = (event) => {
         if (!shouldPreventNavigation()) {
             return
         }
 
         event.preventDefault()
         event.returnValue = true
+    }
+
+    document.addEventListener('livewire:navigate', navigateHandler)
+    window.addEventListener('beforeunload', beforeUnloadHandler)
+
+    $wire.__instance.addCleanup(() => {
+        document.removeEventListener('livewire:navigate', navigateHandler)
+        window.removeEventListener('beforeunload', beforeUnloadHandler)
     })
 }
 
-window.setUpUnsavedActionChangesAlert = ({
+window.setUpFilamentUnsavedActionChangesAlert = ({
     resolveLivewireComponentUsing,
     $wire,
 }) => {
-    window.addEventListener('beforeunload', (event) => {
+    const beforeUnloadHandler = (event) => {
         if (typeof resolveLivewireComponentUsing() === 'undefined') {
             return
         }
 
         if (
-            ($wire.mountedActions?.length ?? 0) &&
+            ($wire.mountedActions ?? []).some(
+                (mountedAction) => mountedAction.hasUnsavedChangesAlert ?? true,
+            ) &&
             !$wire?.__instance?.effects?.redirect
         ) {
             event.preventDefault()
@@ -75,5 +95,11 @@ window.setUpUnsavedActionChangesAlert = ({
 
             return
         }
-    })
+    }
+
+    window.addEventListener('beforeunload', beforeUnloadHandler)
+
+    $wire.__instance.addCleanup(() =>
+        window.removeEventListener('beforeunload', beforeUnloadHandler),
+    )
 }

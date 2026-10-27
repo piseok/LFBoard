@@ -3,6 +3,10 @@
 ])
 
 @php
+    use Filament\Livewire\Notifications;
+    use Filament\Support\Facades\FilamentView;
+    use Filament\View\PanelsRenderHook;
+
     $renderHookScopes = $livewire?->getRenderHookScopes();
 @endphp
 
@@ -16,7 +20,7 @@
     ])
 >
     <head>
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::HEAD_START, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::HEAD_START, scopes: $renderHookScopes) }}
 
         <meta charset="utf-8" />
         <meta name="csrf-token" content="{{ csrf_token() }}" />
@@ -37,7 +41,7 @@
             {{ filled($brandName) ? $brandName : null }}
         </title>
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::STYLES_BEFORE, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::STYLES_BEFORE, scopes: $renderHookScopes) }}
 
         <style>
             [x-cloak=''],
@@ -90,20 +94,21 @@
 
         @stack('styles')
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::STYLES_AFTER, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::STYLES_AFTER, scopes: $renderHookScopes) }}
 
         @if (! filament()->hasDarkMode())
             <script>
-                localStorage.setItem('theme', 'light')
+                localStorage.setItem('filament:theme:mode', 'light')
             </script>
         @elseif (filament()->hasDarkModeForced())
             <script>
-                localStorage.setItem('theme', 'dark')
+                localStorage.setItem('filament:theme:mode', 'dark')
             </script>
         @else
             <script>
                 const loadDarkMode = () => {
-                    window.theme = localStorage.getItem('theme') ?? @js(filament()->getDefaultThemeMode()->value)
+                    window.theme =
+                        localStorage.getItem('filament:theme:mode') ?? @js(filament()->getDefaultThemeMode()->value)
 
                     if (
                         window.theme === 'dark' ||
@@ -121,7 +126,7 @@
             </script>
         @endif
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::HEAD_END, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::HEAD_END, scopes: $renderHookScopes) }}
     </head>
 
     <body
@@ -134,13 +139,13 @@
                 ])
         }}
     >
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::BODY_START, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::BODY_START, scopes: $renderHookScopes) }}
 
         {{ $slot }}
 
-        @livewire(Filament\Livewire\Notifications::class)
+        @livewire(Notifications::class)
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::SCRIPTS_BEFORE, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::SCRIPTS_BEFORE, scopes: $renderHookScopes) }}
 
         @filamentScripts(withCore: true)
 
@@ -160,8 +165,8 @@
 
         @stack('scripts')
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::SCRIPTS_AFTER, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::SCRIPTS_AFTER, scopes: $renderHookScopes) }}
 
-        {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::BODY_END, scopes: $renderHookScopes) }}
+        {{ FilamentView::renderHook(PanelsRenderHook::BODY_END, scopes: $renderHookScopes) }}
     </body>
 </html>

@@ -6,10 +6,34 @@ return [
 
         'heading' => 'Columns',
 
+        'position' => 'Position :position of :count.',
+
+        'position_in_group' => 'Position :position of :count in :group.',
+
+        'reordered' => ':column moved to position :position of :count.',
+
+        'reordered_deferred' => ':column moved to position :position of :count. Apply columns to save your changes.',
+
+        'reordered_in_group' => ':column moved to position :position of :count in :group.',
+
+        'reordered_in_group_deferred' => ':column moved to position :position of :count in :group. Apply columns to save your changes.',
+
         'actions' => [
 
             'apply' => [
                 'label' => 'Apply columns',
+            ],
+
+            'move_up' => [
+                'label' => 'Move :column up',
+            ],
+
+            'move_down' => [
+                'label' => 'Move :column down',
+            ],
+
+            'reorder' => [
+                'label' => 'Reorder column',
             ],
 
             'reset' => [
@@ -26,6 +50,22 @@ return [
             'label' => 'Action|Actions',
         ],
 
+        'editable' => [
+            'saving' => 'Saving change...',
+            'saved' => 'Change saved.',
+            'failure' => 'The save could not be confirmed. Refresh the page before trying again.',
+            'unavailable' => 'This item can no longer be edited.',
+        ],
+
+        'icon' => [
+
+            'boolean' => [
+                'true' => 'Yes',
+                'false' => 'No',
+            ],
+
+        ],
+
         'select' => [
 
             'loading_message' => 'Loading...',
@@ -38,7 +78,7 @@ return [
 
             'searching_message' => 'Searching...',
 
-            'search_prompt' => 'Start typing to search...',
+            'search_prompt' => 'Start typing to search',
 
         ],
 
@@ -115,6 +155,18 @@ return [
             'label' => 'Reorder records',
         ],
 
+        'reorder_record' => [
+            'label' => 'Reorder item :key',
+        ],
+
+        'move_record_up' => [
+            'label' => 'Move :label up',
+        ],
+
+        'move_record_down' => [
+            'label' => 'Move :label down',
+        ],
+
         'filter' => [
             'label' => 'Filter',
         ],
@@ -129,6 +181,10 @@ return [
 
         'column_manager' => [
             'label' => 'Column manager',
+        ],
+
+        'toggle_record_content' => [
+            'label' => 'Expand/collapse item :key',
         ],
 
     ],
@@ -219,7 +275,16 @@ return [
 
     ],
 
+    'loading' => 'Loading...',
+
     'reorder_indicator' => 'Drag and drop the records into order.',
+
+    'reordering' => [
+        'position' => ':label, position :position of :count.',
+        'moved' => ':label moved to position :position of :count.',
+    ],
+
+    'result_count' => '{0} No results|{1} :count result|[2,*] :count results',
 
     'selection_indicator' => [
 

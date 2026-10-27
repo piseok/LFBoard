@@ -95,8 +95,10 @@
         &:not(.fi-aside) {
             @apply grid gap-y-4;
 
-            & > .fi-section-content-ctn {
-                @apply grid gap-y-4;
+            &:not(.fi-collapsed) {
+                & > .fi-section-content-ctn {
+                    @apply grid gap-y-4;
+                }
             }
 
             &.fi-divided {
@@ -147,7 +149,7 @@
         }
 
         & > .fi-section-content-ctn {
-            @apply invisible absolute h-0 overflow-hidden border-none;
+            @apply hidden;
         }
     }
 
@@ -176,8 +178,8 @@
             }
         }
 
-        & > .fi-section-header-after-ctn {
-            @apply self-center;
+        & > .fi-section-header-content > .fi-section-header-after-ctn {
+            @apply max-w-full shrink-0 self-center;
 
             &
                 .fi-sc-text:not(
@@ -187,26 +189,25 @@
                 @apply leading-6;
             }
 
-            & .fi-btn:not(.fi-section-header-after-ctn .fi-dropdown-panel *) {
-                &.fi-size-xs {
-                    @apply -my-0.5;
-                }
+            /* The negative margins let the buttons overhang the header's vertical padding, so a header with actions matches the height of one without them. They are applied to the container instead of the buttons so wrapped rows of actions keep their gap, laddered so the largest button size present wins. */
+            &:has(.fi-btn.fi-size-xs:not(.fi-dropdown-panel *)) {
+                @apply -my-0.5;
+            }
 
-                &.fi-size-sm {
-                    @apply -my-1;
-                }
+            &:has(.fi-btn.fi-size-sm:not(.fi-dropdown-panel *)) {
+                @apply -my-1;
+            }
 
-                &.fi-size-md {
-                    @apply -my-1.5;
-                }
+            &:has(.fi-btn.fi-size-md:not(.fi-dropdown-panel *)) {
+                @apply -my-1.5;
+            }
 
-                &.fi-size-lg {
-                    @apply -my-2;
-                }
+            &:has(.fi-btn.fi-size-lg:not(.fi-dropdown-panel *)) {
+                @apply -my-2;
+            }
 
-                &.fi-size-xl {
-                    @apply -my-2.5;
-                }
+            &:has(.fi-btn.fi-size-xl:not(.fi-dropdown-panel *)) {
+                @apply -my-2.5;
             }
         }
 
@@ -215,8 +216,16 @@
         }
     }
 
+    & .fi-section-header-content {
+        @apply flex min-w-0 flex-wrap items-start gap-3;
+
+        &.fi-section-header-content-has-heading {
+            @apply flex-1;
+        }
+    }
+
     & .fi-section-header-text-ctn {
-        @apply grid flex-1 gap-y-1;
+        @apply grid w-max max-w-full flex-auto gap-y-1;
     }
 
     & .fi-section-header-heading {

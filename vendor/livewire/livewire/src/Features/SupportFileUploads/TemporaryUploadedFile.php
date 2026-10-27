@@ -4,15 +4,16 @@ namespace Livewire\Features\SupportFileUploads;
 
 use Illuminate\Support\Arr;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Storage;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
+use Facades\Livewire\Features\SupportFileUploads\GenerateSignedUploadUrl as GenerateSignedUploadUrlFacade;
 
 class TemporaryUploadedFile extends UploadedFile
 {
     protected $disk;
     protected $storage;
     protected $path;
+    protected $detectedMimeType;
 
     public function __construct($path, $disk)
     {
@@ -62,17 +63,40 @@ class TemporaryUploadedFile extends UploadedFile
             return (string) $escapedMimeType->replace('_', '/');
         }
 
-        $mimeType = $this->storage->mimeType($this->path);
+        return $this->detectedMimeType ??= $this->detectMimeTypeFromContents();
+    }
 
-        // Flysystem V2.0+ removed guess mimeType from extension support, so it has been re-added back
-        // in here to ensure the correct mimeType is returned when using faked files in tests
-        if (in_array($mimeType, ['application/octet-stream', 'inode/x-empty', 'application/x-empty'])) {
-            $detector = new FinfoMimeTypeDetector();
+    protected function detectMimeTypeFromContents(): string
+    {
+        $stream = $this->storage->readStream($this->path);
 
-            $mimeType = $detector->detectMimeTypeFromPath($this->path) ?: 'text/plain';
+        if (! is_resource($stream)) {
+            return 'application/octet-stream';
         }
 
-        return $mimeType;
+        try {
+            // Avoid downloading the entire object when the temporary disk is remote...
+            $contents = stream_get_contents($stream, 64 * 1024);
+
+            // MP3s can start with an ID3 tag (e.g. cover art) bigger than the sample, so read past it...
+            if (is_string($contents) && strlen($contents) >= 10 && str_starts_with($contents, 'ID3')) {
+                $tagSize = (ord($contents[6]) & 0x7F) << 21
+                    | (ord($contents[7]) & 0x7F) << 14
+                    | (ord($contents[8]) & 0x7F) << 7
+                    | (ord($contents[9]) & 0x7F);
+
+                $contents .= stream_get_contents($stream, min($tagSize, 8 * 1024 * 1024));
+            }
+        } finally {
+            fclose($stream);
+        }
+
+        if ($contents === false || $contents === '') {
+            return 'application/octet-stream';
+        }
+
+        return (new FinfoMimeTypeDetector())->detectMimeTypeFromBuffer($contents)
+            ?: 'application/octet-stream';
     }
 
     public function getFilename(): string
@@ -121,7 +145,7 @@ class TemporaryUploadedFile extends UploadedFile
             return $this->storage->temporaryUrl($this->path, now()->addDay());
         }
 
-        return URL::temporarySignedRoute(
+        return GenerateSignedUploadUrlFacade::signedRoute(
             'livewire.preview-file', now()->addMinutes(30)->endOfHour(), ['filename' => $this->getFilename()]
         );
     }
@@ -200,6 +224,31 @@ class TemporaryUploadedFile extends UploadedFile
         return new static($filePath, FileUploadConfiguration::disk());
     }
 
+    protected static function generateToken(string $path): string
+    {
+        return substr(hash_hmac('sha256', $path, app('encrypter')->getKey()), 0, 8);
+    }
+
+    public static function signPath(string $path): string
+    {
+        return static::generateToken($path) . ':' . $path;
+    }
+
+    public static function extractPathFromSignedPath(string $signedPath): string|false
+    {
+        if (! str_contains($signedPath, ':')) {
+            return false;
+        }
+
+        [$token, $path] = explode(':', $signedPath, 2);
+
+        if (! hash_equals(static::generateToken($path), $token)) {
+            return false;
+        }
+
+        return $path;
+    }
+
     public static function canUnserialize($subject)
     {
         if (is_string($subject)) {
@@ -219,13 +268,20 @@ class TemporaryUploadedFile extends UploadedFile
     {
         if (is_string($subject)) {
             if (str($subject)->startsWith('livewire-file:')) {
-                return static::createFromLivewire(str($subject)->after('livewire-file:'));
+                $path = static::extractPathFromSignedPath(str($subject)->after('livewire-file:'));
+
+                return $path === false ? null : static::createFromLivewire($path);
             }
 
             if (str($subject)->startsWith('livewire-files:')) {
-                $paths = json_decode(str($subject)->after('livewire-files:'), true);
+                $signedPaths = json_decode(str($subject)->after('livewire-files:'), true) ?: [];
 
-                return collect($paths)->map(function ($path) { return static::createFromLivewire($path); })->toArray();
+                return collect($signedPaths)
+                    ->map(function ($signedPath) { return static::extractPathFromSignedPath($signedPath); })
+                    ->filter(function ($path) { return $path !== false; })
+                    ->map(function ($path) { return static::createFromLivewire($path); })
+                    ->values()
+                    ->all();
             }
         }
 
@@ -240,11 +296,13 @@ class TemporaryUploadedFile extends UploadedFile
 
     public function serializeForLivewireResponse()
     {
-        return 'livewire-file:'.$this->getFilename();
+        return 'livewire-file:'.static::signPath($this->getFilename());
     }
 
     public static function serializeMultipleForLivewireResponse($files)
     {
-        return 'livewire-files:'.json_encode(collect($files)->map->getFilename());
+        return 'livewire-files:'.json_encode(collect($files)->map(function ($file) {
+            return static::signPath($file->getFilename());
+        }));
     }
 }

@@ -180,6 +180,8 @@ trait CanBeValidated
                         ]) ?? $query;
                     }
 
+                    $query->useWritePdo();
+
                     if (! $query->exists()) {
                         $fail(__($component->getValidationMessages()['exists'] ?? 'validation.exists', ['attribute' => $component->getValidationAttribute()]));
                     }
@@ -217,11 +219,13 @@ trait CanBeValidated
                     ]) ?? $query;
                 }
 
+                $query->useWritePdo();
+
                 if (! $query->exists()) {
                     $fail(__($component->getValidationMessages()['exists'] ?? 'validation.exists', ['attribute' => $component->getValidationAttribute()]));
                 }
             };
-        }, static fn (Field $component, ?string $model): bool => (bool) ($component->evaluate($model) ?? $model));
+        }, static fn (Field $component): bool => (bool) ($component->evaluate($model) ?? $component->getModel()));
 
         return $this;
     }
@@ -617,11 +621,13 @@ trait CanBeValidated
                     ]) ?? $query;
                 }
 
+                $query->useWritePdo();
+
                 if ($query->exists()) {
                     $fail(__($component->getValidationMessages()['unique'] ?? 'validation.unique', ['attribute' => $component->getValidationAttribute()]));
                 }
             };
-        }, fn (Field $component, ?string $model): bool => (bool) ($component->evaluate($model) ?? $model));
+        }, fn (Field $component): bool => (bool) ($component->evaluate($model) ?? $component->getModel()));
 
         return $this;
     }
@@ -685,7 +691,9 @@ trait CanBeValidated
                         return;
                     }
 
-                    $fail(__($validationMessages['distinct.must_be_selected'] ?? 'filament-forms::validation.distinct.must_be_selected', ['attribute' => $component->getValidationAttribute()]));
+                    if ($component->isRequired()) {
+                        $fail(__($validationMessages['distinct.must_be_selected'] ?? 'filament-forms::validation.distinct.must_be_selected', ['attribute' => $component->getValidationAttribute()]));
+                    }
 
                     return;
                 }

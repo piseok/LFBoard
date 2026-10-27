@@ -9,9 +9,9 @@ use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\HasColor;
 use Filament\Support\Concerns\HasTooltip;
 use Filament\Support\Enums\IconSize;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Js;
-use Illuminate\View\ComponentAttributeBag;
 
 use function Filament\Support\generate_icon_html;
 
@@ -44,7 +44,7 @@ class Icon extends Component implements HasEmbeddedView
         return $this;
     }
 
-    public function getIcon(): string | BackedEnum
+    public function getIcon(): string | BackedEnum | Htmlable
     {
         return $this->evaluate($this->icon);
     }
@@ -78,9 +78,68 @@ class Icon extends Component implements HasEmbeddedView
     public function toEmbeddedHtml(): string
     {
         $size = $this->getSize();
+        $icon = $this->getIcon();
 
-        return generate_icon_html($this->getIcon(), attributes: (new ComponentAttributeBag([
-            'x-tooltip' => filled($tooltip = $this->getTooltip()) ? '{ content: ' . Js::from($tooltip) . ', theme: $store.theme, allowHTML: ' . Js::from($tooltip instanceof Htmlable) . ' }' : null,
-        ]))->merge($this->getExtraAttributes(), escape: false)->color(IconComponent::class, $this->getColor() ?? 'primary')->class(['fi-sc-icon']), size: $size instanceof IconSize ? $size : null)->toHtml();
+        $tooltip = $this->getTooltip();
+        $hasTooltip = filled($tooltip);
+
+        $extraAttributes = $this->getExtraAttributes();
+
+        $ariaLabel = $extraAttributes['aria-label'] ?? null;
+        $ariaLabelledBy = $extraAttributes['aria-labelledby'] ?? null;
+        $ariaDescribedBy = $extraAttributes['aria-describedby'] ?? null;
+
+        $normalizeText = static fn (mixed $text): mixed => $text instanceof Htmlable
+            ? trim(strip_tags($text->toHtml()))
+            : $text;
+
+        $ariaLabel = $normalizeText($ariaLabel);
+
+        $isImagePathIcon = is_string($icon) && str_contains($icon, '/');
+
+        if ($isImagePathIcon && blank($ariaLabel) && blank($ariaLabelledBy) && blank($extraAttributes['alt'] ?? null) && $hasTooltip) {
+            $ariaLabel = $normalizeText($tooltip);
+            $extraAttributes['aria-label'] = $ariaLabel;
+        }
+
+        foreach (['alt', 'aria-describedby', 'aria-label', 'aria-labelledby'] as $attribute) {
+            if (filled($extraAttributes[$attribute] ?? null)) {
+                $extraAttributes[$attribute] = e($normalizeText($extraAttributes[$attribute]), doubleEncode: false);
+            }
+        }
+
+        if (! $isImagePathIcon) {
+            $extraAttributes['aria-hidden'] = 'true';
+        }
+
+        $iconAttributes = [
+            'x-tooltip' => $hasTooltip ? '{ content: ' . Js::from($tooltip) . ', theme: $store.theme, allowHTML: ' . Js::from($tooltip instanceof Htmlable) . ' }' : null,
+        ];
+
+        $html = generate_icon_html($icon, attributes: (new FilamentComponentAttributeBag($iconAttributes))->merge($extraAttributes, escape: false)->color(IconComponent::class, $this->getColor() ?? 'primary')->class([
+            'fi-sc-icon',
+            'fi-sc-icon-htmlable' => $icon instanceof Htmlable,
+        ]), size: $size instanceof IconSize ? $size : null)?->toHtml() ?? '';
+
+        if ($isImagePathIcon) {
+            return $html;
+        }
+
+        if (blank($ariaLabel) && blank($ariaLabelledBy) && $hasTooltip) {
+            $ariaLabel = $normalizeText($tooltip);
+        }
+
+        if (blank($ariaLabel) && blank($ariaLabelledBy)) {
+            return $html;
+        }
+
+        $accessibleAttributes = (new FilamentComponentAttributeBag([
+            'aria-describedby' => filled($ariaDescribedBy) ? e($normalizeText($ariaDescribedBy), doubleEncode: false) : null,
+            'aria-label' => filled($ariaLabel) ? e($ariaLabel, doubleEncode: false) : null,
+            'aria-labelledby' => filled($ariaLabelledBy) ? e($normalizeText($ariaLabelledBy), doubleEncode: false) : null,
+            'role' => 'img',
+        ]))->class(['fi-sr-only']);
+
+        return $html . '<span ' . $accessibleAttributes->toHtml() . '></span>';
     }
 }

@@ -8,12 +8,16 @@ use Illuminate\Support\Arr;
 
 class EnumArrayStateCast implements StateCast
 {
+    protected EnumStateCast $enumStateCast;
+
     /**
      * @param  class-string<BackedEnum>  $enum
      */
     public function __construct(
         protected string $enum,
-    ) {}
+    ) {
+        $this->enumStateCast = app(EnumStateCast::class, ['enum' => $enum]);
+    }
 
     /**
      * @return array<BackedEnum>
@@ -34,17 +38,13 @@ class EnumArrayStateCast implements StateCast
         return array_reduce(
             $state,
             function (array $carry, $stateItem): array {
-                if (blank($stateItem)) {
+                $stateItem = $this->enumStateCast->get($stateItem);
+
+                if ($stateItem === null) {
                     return $carry;
                 }
 
-                if ($stateItem instanceof BackedEnum) {
-                    $carry[] = $stateItem;
-
-                    return $carry;
-                }
-
-                $carry[] = $this->enum::tryFrom($stateItem);
+                $carry[] = $stateItem;
 
                 return $carry;
             },
@@ -71,17 +71,13 @@ class EnumArrayStateCast implements StateCast
         return array_reduce(
             $state,
             function (array $carry, $stateItem): array {
-                if (blank($stateItem)) {
+                $stateItem = $this->enumStateCast->set($stateItem);
+
+                if ($stateItem === null) {
                     return $carry;
                 }
 
-                if (! ($stateItem instanceof BackedEnum)) {
-                    $carry[] = $stateItem;
-
-                    return $carry;
-                }
-
-                $carry[] = strval($stateItem->value);
+                $carry[] = $stateItem;
 
                 return $carry;
             },

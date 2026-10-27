@@ -1,12 +1,3 @@
-@php
-    use Filament\Support\Enums\IconSize;
-    use Filament\Support\Enums\Size;
-    use Filament\Support\View\Components\BadgeComponent;
-    use Filament\Support\View\Components\DropdownComponent\ItemComponent;
-    use Filament\Support\View\Components\DropdownComponent\ItemComponent\IconComponent;
-    use Illuminate\View\ComponentAttributeBag;
-@endphp
-
 @props([
     'alpineDeferredBadgeData' => null,
     'alpineDeferredBadgeLoading' => null,
@@ -30,6 +21,15 @@
 ])
 
 @php
+    use Filament\Support\Enums\IconSize;
+    use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
+    use Filament\Support\View\Components\BadgeComponent;
+    use Filament\Support\View\Components\DropdownComponent\ItemComponent;
+    use Filament\Support\View\Components\DropdownComponent\ItemComponent\IconComponent;
+    use Illuminate\Contracts\Support\Htmlable;
+    use Illuminate\View\ComponentAttributeBag;
+    use Illuminate\View\ComponentSlot;
+
     if (filled($iconSize) && (! $iconSize instanceof IconSize)) {
         $iconSize = IconSize::tryFrom($iconSize) ?? $iconSize;
     }
@@ -46,6 +46,10 @@
 
     $hasDeferredBadge = filled($alpineDeferredBadgeData);
     $hasTooltip = filled($tooltip);
+
+    $loadingDelay = ($icon || $hasLoadingIndicator)
+        ? config('filament.livewire_loading_delay', 'default')
+        : null;
 @endphp
 
 {!! ($tag === 'form') ? ('<form ' . $attributes->only(['action', 'class', 'method', 'wire:submit'])->toHtml() . '>') : '' !!}
@@ -66,7 +70,7 @@
         x-tooltip="{
             content: @js($tooltip),
             theme: $store.theme,
-            allowHTML: @js($tooltip instanceof \Illuminate\Contracts\Support\Htmlable),
+            allowHTML: @js($tooltip instanceof Htmlable),
         }"
     @endif
     {{
@@ -77,13 +81,15 @@
             )
             ->merge([
                 'aria-disabled' => $disabled ? 'true' : null,
-                'disabled' => $disabled && blank($tooltip),
+                'role' => 'menuitem',
+                'tabindex' => '-1',
                 'type' => match ($tag) {
                     'button' => 'button',
                     'form' => 'submit',
                     default => null,
                 },
-                'wire:loading.attr' => $tag === 'button' ? 'disabled' : null,
+                'wire:loading.attr' => $tag === 'button' ? 'aria-disabled' : null,
+                'wire:loading.class' => $tag === 'button' ? $attributes->prepends('fi-disabled') : null,
                 'wire:target' => ($hasLoadingIndicator && $loadingIndicatorTarget) ? $loadingIndicatorTarget : null,
             ], escape: false)
             ->when(
@@ -99,10 +105,10 @@
             ->color(ItemComponent::class, $color)
     }}
 >
-    @if ($icon)
+    @if ($icon || $iconAlias)
         {{
-            \Filament\Support\generate_icon_html($icon, $iconAlias, (new ComponentAttributeBag([
-                'wire:loading.remove.delay.' . config('filament.livewire_loading_delay', 'default') => $hasLoadingIndicator,
+            \Filament\Support\generate_icon_html($icon, $iconAlias, (new FilamentComponentAttributeBag([
+                'wire:loading.remove.delay.' . $loadingDelay => $hasLoadingIndicator,
                 'wire:target' => $hasLoadingIndicator ? $loadingIndicatorTarget : false,
             ]))->color(IconComponent::class, $iconColor), size: $iconSize)
         }}
@@ -113,7 +119,7 @@
             class="fi-dropdown-list-item-image"
             style="background-image: url('{{ $image }}')"
             @if ($hasLoadingIndicator)
-                wire:loading.remove.delay.{{ config('filament.livewire_loading_delay', 'default') }}
+                wire:loading.remove.delay.{{ $loadingDelay }}
                 wire:target="{{ $loadingIndicatorTarget }}"
             @endif
         ></div>
@@ -121,8 +127,8 @@
 
     @if ($hasLoadingIndicator)
         {{
-            \Filament\Support\generate_loading_indicator_html((new ComponentAttributeBag([
-                'wire:loading.delay.' . config('filament.livewire_loading_delay', 'default') => '',
+            \Filament\Support\generate_loading_indicator_html((new FilamentComponentAttributeBag([
+                'wire:loading.delay.' . $loadingDelay => '',
                 'wire:target' => $loadingIndicatorTarget,
             ]))->color(IconComponent::class, $iconColor), size: $iconSize)
         }}
@@ -133,7 +139,7 @@
     </span>
 
     @if (filled($badge))
-        @if ($badge instanceof \Illuminate\View\ComponentSlot)
+        @if ($badge instanceof ComponentSlot)
             {{ $badge }}
         @else
             <span
@@ -141,10 +147,10 @@
                     x-tooltip="{
                         content: @js($badgeTooltip),
                         theme: $store.theme,
-                        allowHTML: @js($badgeTooltip instanceof \Illuminate\Contracts\Support\Htmlable),
+                        allowHTML: @js($badgeTooltip instanceof Htmlable),
                     }"
                 @endif
-                {{ (new ComponentAttributeBag)->color(BadgeComponent::class, $badgeColor)->class(['fi-badge']) }}
+                {{ (new FilamentComponentAttributeBag)->color(BadgeComponent::class, $badgeColor)->class(['fi-badge']) }}
             >
                 {{ $badge }}
             </span>
@@ -155,7 +161,7 @@
             x-cloak
             class="fi-dropdown-list-item-badge-placeholder"
         >
-            {{ \Filament\Support\generate_loading_indicator_html(size: \Filament\Support\Enums\IconSize::Small) }}
+            {{ \Filament\Support\generate_loading_indicator_html(size: IconSize::Small) }}
         </span>
 
         <template

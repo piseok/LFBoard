@@ -104,6 +104,14 @@ return [
 
         ],
 
+        'block_picker' => [
+
+            'no_search_results_message' => 'Žiadne bloky nezodpovedajú vášmu hľadaniu.',
+
+            'search_prompt' => 'Hľadať bloky',
+
+        ],
+
     ],
 
     'checkbox_list' => [
@@ -122,9 +130,53 @@ return [
 
     ],
 
+    'color_picker' => [
+
+        'panel_label' => 'Výber farby',
+
+    ],
+
+    'date_time_picker' => [
+
+        'month_select' => [
+            'label' => 'Mesiac',
+        ],
+
+        'year_input' => [
+            'label' => 'Rok',
+        ],
+
+        'hour_input' => [
+            'label' => 'Hodina',
+        ],
+
+        'minute_input' => [
+            'label' => 'Minúta',
+        ],
+
+        'second_input' => [
+            'label' => 'Sekunda',
+        ],
+
+    ],
+
     'file_upload' => [
 
+        'actions' => [
+
+            'download' => [
+                'label' => 'Stiahnuť',
+            ],
+
+            'open' => [
+                'label' => 'Otvoriť v novej záložke',
+            ],
+
+        ],
+
         'editor' => [
+
+            'label' => 'Editor obrázkov',
 
             'actions' => [
 
@@ -268,6 +320,18 @@ return [
 
         ],
 
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Akcie',
+            ],
+
+            'reorder' => [
+                'label' => 'Presunúť',
+            ],
+
+        ],
+
         'fields' => [
 
             'key' => [
@@ -338,6 +402,18 @@ return [
     ],
 
     'repeater' => [
+
+        'columns' => [
+
+            'actions' => [
+                'label' => 'Akcie',
+            ],
+
+            'reorder' => [
+                'label' => 'Presunúť',
+            ],
+
+        ],
 
         'actions' => [
 
@@ -425,6 +501,10 @@ return [
 
                 ],
 
+            ],
+
+            'close_panel' => [
+                'label' => 'Zavrieť panel',
             ],
 
             'custom_block' => [
@@ -591,6 +671,28 @@ return [
 
         ],
 
+        'custom_blocks' => [
+
+            'actions' => [
+
+                'delete' => [
+                    'label' => 'Odstrániť blok',
+                ],
+
+                'edit' => [
+                    'label' => 'Upraviť blok',
+                ],
+
+            ],
+
+            'no_search_results_message' => 'Žiadne bloky nezodpovedajú vášmu hľadaniu.',
+
+            'search_label' => 'Hľadať bloky',
+
+            'search_prompt' => 'Hľadať bloky',
+
+        ],
+
         'file_attachments_accepted_file_types_message' => 'Nahrané súbory musia byť typu: :values.',
 
         'file_attachments_max_size_message' => 'Nahrané súbory nesmú byť väčšie ako :max kilobajtov.',
@@ -602,6 +704,10 @@ return [
             'no_search_results_message' => 'Žiadne výsledky nezodpovedajú vášmu hľadaniu.',
             'search_prompt' => 'Začnite písať na vyhľadávanie...',
             'searching_message' => 'Hľadám...',
+        ],
+
+        'toolbar' => [
+            'label' => 'Panel nástrojov',
         ],
 
         'tools' => [
@@ -664,6 +770,10 @@ return [
 
         'actions' => [
 
+            'clear' => [
+                'label' => 'Vymazať výber',
+            ],
+
             'create_option' => [
 
                 'label' => 'Vytvoriť',
@@ -708,6 +818,10 @@ return [
 
             ],
 
+            'remove_option' => [
+                'label' => 'Odstrániť :label',
+            ],
+
         ],
 
         'boolean' => [
@@ -727,6 +841,8 @@ return [
 
         'searching_message' => 'Hľadám...',
 
+        'search_label' => 'Hľadať',
+
         'search_prompt' => 'Začnite písať...',
 
     ],
@@ -742,6 +858,10 @@ return [
         ],
 
         'placeholder' => 'Nová značka',
+
+        'tag_added' => 'Pridané: :tag',
+
+        'tag_removed' => 'Odstránené: :tag',
 
     ],
 

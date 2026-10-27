@@ -1,8 +1,6 @@
 ---
 title: Custom components
 ---
-import Aside from "@components/Aside.astro"
-import UtilityInjection from "@components/UtilityInjection.astro"
 
 ## Inserting a Blade view into a schema
 
@@ -129,6 +127,10 @@ Livewire::make(Chart::class)
     When inserting a Livewire component into the schema, there are limited capabilities. Only serializable data is accessible from the nested Livewire component, since they are rendered separately. As such, you can't [render a child schema](#rendering-the-components-child-schema), [access another component's live state](#accessing-the-state-of-another-component-in-the-blade-view), [access the current Livewire component instance](#accessing-the-current-livewire-component-instance-in-the-blade-view), or [access the current component instance](#accessing-the-current-component-instance-in-the-blade-view). Only [static data that you pass to the Livewire component](#passing-parameters-to-a-livewire-component), and [the current record](#accessing-the-current-record-in-the-livewire-component) are accessible. Situations where you should render a nested Livewire component instead of a [Blade view](#inserting-a-blade-view-into-a-schema) are rare because of these limitations.
 </Aside>
 
+<Aside variant="warning">
+    A custom Livewire component does not inherit the parent component's model scoping or authorization. Re-query and authorize models in its public properties, including a record passed into the component. Do the same for model arguments passed to a lazy component's `mount()` method. Filament components such as widgets still run their own documented checks. See [Eloquent model restoration in Livewire](../advanced/security#understanding-eloquent-model-restoration-in-livewire) for more information.
+</Aside>
+
 If you are rendering multiple of the same Livewire component, please make sure to pass a unique `key()` to each:
 
 ```php
@@ -156,7 +158,7 @@ use Filament\Schemas\Components\Livewire;
 Livewire::make(Chart::class, ['bar' => 'baz'])
 ```
 
-<UtilityInjection set="schemaComponents" version="4.x">As well as allowing a static value, the `make()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
+<UtilityInjection set="schemaComponents">As well as allowing a static value, the `make()` method also accepts a function to dynamically calculate it. You can inject various utilities into the function as parameters.</UtilityInjection>
 
 Now, those parameters will be passed to the Livewire component's `mount()` method:
 
@@ -368,7 +370,7 @@ class Chart extends Component
 
     public function __construct(string | Closure | null $heading = null)
     {
-        $this->heading($heading)
+        $this->heading($heading);
     }
 
     public static function make(string | Closure | null $heading = null): static

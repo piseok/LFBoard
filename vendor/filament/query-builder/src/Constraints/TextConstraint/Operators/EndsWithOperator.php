@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Str;
 
+use function Filament\Support\apply_search_constraint;
+use function Filament\Support\generate_search_pattern;
+
 class EndsWithOperator extends Operator
 {
     public function getName(): string
@@ -36,7 +39,7 @@ class EndsWithOperator extends Operator
                 'filament-query-builder::query-builder.operators.text.ends_with.summary.direct',
             [
                 'attribute' => $this->getConstraint()->getAttributeLabel(),
-                'text' => $this->getSettings()['text'],
+                'text' => $this->getStringSetting('text'),
             ],
         );
     }
@@ -56,7 +59,12 @@ class EndsWithOperator extends Operator
 
     public function apply(Builder $query, string $qualifiedColumn): Builder
     {
-        $text = trim($this->getSettings()['text']);
+        // Security: skip applying the constraint when the tampered setting is not a scalar string.
+        $text = $this->getStringSetting('text');
+
+        if ($text === null) {
+            return $query;
+        }
 
         /** @var Connection $databaseConnection */
         $databaseConnection = $query->getConnection();
@@ -87,6 +95,11 @@ class EndsWithOperator extends Operator
             $text = Str::lower($text);
         }
 
-        return $query->{$this->isInverse() ? 'whereNot' : 'where'}($qualifiedColumn, 'like', "%{$text}");
+        return apply_search_constraint(
+            $query,
+            $qualifiedColumn,
+            generate_search_pattern($text, hasLeadingWildcard: true, hasTrailingWildcard: false),
+            isInverse: $this->isInverse(),
+        );
     }
 }

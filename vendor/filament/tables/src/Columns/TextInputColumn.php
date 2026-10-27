@@ -11,12 +11,12 @@ use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\RawJs;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Support\View\Components\InputComponent\WrapperComponent\IconComponent;
 use Filament\Tables\Columns\Contracts\Editable;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Js;
-use Illuminate\View\ComponentAttributeBag;
 
 use function Filament\Support\generate_icon_html;
 
@@ -205,6 +205,7 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
     {
         $isDisabled = $this->isDisabled();
         $state = $this->getState();
+        $relatedRecord = $this->getRelatedRecord();
         $mask = $this->getMask();
 
         $alignment = $this->getAlignment() ?? Alignment::Start;
@@ -232,10 +233,14 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
                 'x-load' => true,
                 'x-load-src' => FilamentAsset::getAlpineComponentSrc('columns/text-input', 'filament/tables'),
                 'x-data' => 'textInputTableColumn({
+                    messages: ' . Js::from($this->getUpdateStateMessages()) . ',
                     name: ' . Js::from($this->getName()) . ',
                     recordKey: ' . Js::from($this->getRecordKey()) . ',
                     state: ' . Js::from($state) . ',
                 })',
+                'x-id' => "['table-column-error']",
+                'x-on:click.capture' => 'blockEdit($event)',
+                'x-on:keydown.capture' => 'blockEdit($event)',
             ], escape: false)
             ->class([
                 'fi-ta-text-input',
@@ -244,22 +249,33 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
 
         $inputAttributes = $this->getExtraInputAttributeBag()
             ->merge([
+                'aria-label' => e(trim(strip_tags(($ariaLabel = $this->getLabel()) instanceof Htmlable ? $ariaLabel->toHtml() : $ariaLabel)), doubleEncode: false),
                 'disabled' => $isDisabled,
                 'wire:loading.attr' => 'disabled',
                 'wire:target' => implode(',', Table::LOADING_TARGETS),
+                'x-bind:aria-invalid' => "error ? 'true' : " . Js::from($this->getExtraInputAttributeBag()->get('aria-invalid')),
+                'x-bind:aria-busy' => "isLoading ? 'true' : " . Js::from($this->getExtraInputAttributeBag()->get('aria-busy')),
+                'x-bind:aria-describedby' => 'getAccessibilityAttributes(' . Js::from($this->getExtraInputAttributeBag()->only('aria-describedby')->getAttributes()) . ")[ 'aria-describedby' ]",
                 'x-bind:disabled' => $isDisabled ? null : 'isLoading',
+                'x-on:input' => 'clearError()',
                 'inputmode' => $this->getInputMode(),
                 'placeholder' => filled($placeholder = $this->getPlaceholder()) ? e($placeholder) : null,
                 'step' => $this->getStep(),
                 'type' => $type,
                 'x-mask' . ($mask instanceof RawJs ? ':dynamic' : '') => filled($mask) ? $mask : null,
-                'x-tooltip' => filled($tooltip = $this->getTooltip($state))
+                'x-tooltip' => 'error === undefined ? ' . (filled($tooltip = $this->getTooltip($state, $relatedRecord))
                     ? '{
                         content: ' . Js::from($tooltip) . ',
                         theme: $store.theme,
                         allowHTML: ' . Js::from($tooltip instanceof Htmlable) . ',
+                        aria: { content: \'auto\' },
                     }'
-                    : null,
+                    : 'false') . ' : {
+                        content: error,
+                        theme: $store.theme,
+                        allowHTML: false,
+                        aria: { content: null },
+                    }',
             ], escape: false)
             ->class([
                 'fi-input',
@@ -279,14 +295,6 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
                     'fi-disabled': isLoading || <?= Js::from($isDisabled) ?>,
                     'fi-invalid': error !== undefined,
                 }"
-                x-tooltip="
-                    error === undefined
-                        ? false
-                        : {
-                            content: error,
-                            theme: $store.theme,
-                        }
-                "
                 x-on:click.prevent.stop
                 class="fi-input-wrp"
             >
@@ -294,7 +302,7 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
                     <div
                         class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content <?= $isPrefixInline ? 'fi-inline' : '' ?> <?= filled($prefixLabel) ? 'fi-input-wrp-prefix-has-label' : '' ?>"
                     >
-                        <?= generate_icon_html($prefixIcon, null, (new ComponentAttributeBag)
+                        <?= generate_icon_html($prefixIcon, null, (new FilamentComponentAttributeBag)
                             ->color(IconComponent::class, $prefixIconColor))?->toHtml() ?>
 
                         <?php if (filled($prefixLabel)) { ?>
@@ -325,11 +333,28 @@ class TextInputColumn extends Column implements Editable, HasEmbeddedView
                             </span>
                         <?php } ?>
 
-                        <?= generate_icon_html($suffixIcon, null, (new ComponentAttributeBag)
+                        <?= generate_icon_html($suffixIcon, null, (new FilamentComponentAttributeBag)
                             ->color(IconComponent::class, $suffixIconColor))?->toHtml() ?>
                     </div>
                 <?php } ?>
             </div>
+
+            <p
+                x-cloak
+                x-show="error"
+                x-bind:id="$id('table-column-error')"
+                x-ref="error"
+                x-text="error"
+                class="fi-sr-only"
+            ></p>
+
+            <p
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                x-text="status"
+                class="fi-sr-only"
+            ></p>
         </div>
 
         <?php return ob_get_clean();

@@ -2,6 +2,7 @@
 
 namespace Filament\Infolists\Components;
 
+use ArrayAccess;
 use Closure;
 use Exception;
 use Filament\Infolists\Components\RepeatableEntry\TableColumn;
@@ -11,10 +12,13 @@ use Filament\Schemas\Schema;
 use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\CanBeContained;
 use Filament\Support\Enums\Alignment;
+use Generator;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Js;
+use Traversable;
 
 class RepeatableEntry extends Entry implements HasEmbeddedView
 {
@@ -25,6 +29,15 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
      * @var array<TableColumn> | Closure | null
      */
     protected array | Closure | null $tableColumns = null;
+
+    protected mixed $cachedItemsState = null;
+
+    protected ?Generator $cachedItemsStateGenerator = null;
+
+    /**
+     * @var array<array-key, mixed> | null
+     */
+    protected ?array $cachedItemsStateGeneratorSnapshot = null;
 
     /**
      * Configure table columns for display
@@ -61,9 +74,21 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
      */
     public function getItems(): array
     {
+        return $this->getCachedDefaultChildSchemas();
+    }
+
+    /**
+     * @return array<Schema>
+     */
+    public function getDefaultChildSchemas(): array
+    {
+        $state = $this->normalizeItemsState($this->getState() ?? []);
+
+        $this->cachedItemsState = $state;
+
         $containers = [];
 
-        foreach ($this->getState() ?? [] as $itemKey => $itemData) {
+        foreach ($state as $itemKey => $itemData) {
             $container = $this
                 ->getChildSchema()
                 ->getClone()
@@ -82,12 +107,88 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
         return $containers;
     }
 
-    /**
-     * @return array<Schema>
-     */
-    public function getDefaultChildSchemas(): array
+    protected function areCachedDefaultChildSchemasFresh(): bool
     {
-        return $this->getItems();
+        return $this->cachedItemsState === $this->normalizeItemsState($this->getState() ?? []);
+    }
+
+    protected function isCachedDefaultChildSchemaFresh(string | int $key): bool
+    {
+        [$hasItem, $itemState] = $this->getItemState($this->getState() ?? [], $key);
+
+        return $hasItem
+            && is_array($this->cachedItemsState)
+            && array_key_exists($key, $this->cachedItemsState)
+            && ($this->cachedItemsState[$key] === $itemState);
+    }
+
+    /**
+     * @return array{bool, mixed}
+     */
+    protected function getItemState(mixed $state, string | int $key): array
+    {
+        if ($state instanceof Generator) {
+            $state = $this->normalizeItemsState($state);
+        }
+
+        if ($state instanceof Collection) {
+            $state = $state->all();
+        }
+
+        if (is_array($state)) {
+            return array_key_exists($key, $state)
+                ? [true, $state[$key]]
+                : [false, null];
+        }
+
+        if ($state instanceof ArrayAccess) {
+            return $state->offsetExists($key)
+                ? [true, $state->offsetGet($key)]
+                : [false, null];
+        }
+
+        if (is_object($state) && property_exists($state, (string) $key)) {
+            return [true, $state->{$key}];
+        }
+
+        if ($state instanceof Traversable) {
+            foreach ($state as $itemKey => $itemState) {
+                if ($itemKey === $key) {
+                    return [true, $itemState];
+                }
+            }
+        }
+
+        return [false, null];
+    }
+
+    protected function normalizeItemsState(mixed $state): mixed
+    {
+        if ($state instanceof Generator) {
+            if ($state === $this->cachedItemsStateGenerator) {
+                return $this->cachedItemsStateGeneratorSnapshot;
+            }
+
+            $snapshot = iterator_to_array($state);
+            $this->cachedItemsStateGenerator = $state;
+            $this->cachedItemsStateGeneratorSnapshot = $snapshot;
+
+            return $snapshot;
+        }
+
+        if ($state instanceof Collection) {
+            return $state->all();
+        }
+
+        if ($state instanceof Traversable) {
+            return iterator_to_array($state);
+        }
+
+        if (is_object($state)) {
+            return get_object_vars($state);
+        }
+
+        return $state;
     }
 
     public function toEmbeddedHtml(): string
@@ -191,9 +292,10 @@ class RepeatableEntry extends Entry implements HasEmbeddedView
                     <tr>
                         <?php foreach ($tableColumns as $column) { ?>
                             <th
+                                scope="col"
                                 class="<?= Arr::toCssClasses([
                                     'fi-wrapped' => $column->canHeaderWrap(),
-                                    (($columnAlignment = $column->getAlignment()) instanceof Alignment) ? ('fi-align-' . $columnAlignment->value) : $columnAlignment,
+                                    (($columnAlignment = $column->getAlignment()) instanceof Alignment) ? ('fi-align-' . $columnAlignment->value) : e($columnAlignment),
                                 ]) ?>"
                                 <?php if (filled($columnWidth = $column->getWidth())) { ?>
                                     style="width: <?= e($columnWidth) ?>"

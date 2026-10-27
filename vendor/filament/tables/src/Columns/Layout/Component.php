@@ -7,6 +7,7 @@ use Filament\Support\Components\ViewComponent;
 use Filament\Support\Concerns\CanGrow;
 use Filament\Support\Concerns\CanSpanColumns;
 use Filament\Support\Concerns\HasExtraAttributes;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\Concerns\BelongsToLayout;
 use Filament\Tables\Columns\Concerns\BelongsToTable;
@@ -16,7 +17,6 @@ use Filament\Tables\Columns\Concerns\HasRowLoopObject;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
-use Illuminate\View\ComponentAttributeBag;
 use LogicException;
 
 class Component extends ViewComponent
@@ -121,6 +121,11 @@ class Component extends ViewComponent
         return $this->table ?? $this->getLayout()?->getTable() ?? throw new LogicException('The column layout component is not mounted to a table.');
     }
 
+    public function hasTable(): bool
+    {
+        return isset($this->table) || ($this->getLayout()?->hasTable() ?? false);
+    }
+
     public function isCollapsible(): bool
     {
         return $this->isCollapsible;
@@ -167,7 +172,7 @@ class Component extends ViewComponent
             return null;
         }
 
-        $attributes = (new ComponentAttributeBag)
+        $attributes = (new FilamentComponentAttributeBag)
             ->gridColumn(
                 $this->getColumnSpan(),
                 $this->getColumnStart(),

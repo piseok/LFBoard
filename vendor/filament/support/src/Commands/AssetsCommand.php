@@ -84,7 +84,7 @@ class AssetsCommand extends Command
                 ->beforeLast(DIRECTORY_SEPARATOR),
         );
 
-        $filesystem->copy($from, $to);
+        $filesystem->replace($to, $filesystem->get($from), 0666 & ~umask());
 
         $this->publishedAssets[] = $to;
     }

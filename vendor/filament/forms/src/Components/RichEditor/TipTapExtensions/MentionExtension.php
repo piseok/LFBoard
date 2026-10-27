@@ -2,6 +2,7 @@
 
 namespace Filament\Forms\Components\RichEditor\TipTapExtensions;
 
+use DOMElement;
 use Tiptap\Core\Node;
 use Tiptap\Utils\HTML;
 
@@ -27,12 +28,23 @@ class MentionExtension extends Node
      */
     public function parseHTML(): array
     {
+        $removeContent = static function (DOMElement $element): array {
+            // `mention` nodes are leaves; their display text comes from attributes.
+            while ($element->firstChild !== null) {
+                $element->removeChild($element->firstChild);
+            }
+
+            return [];
+        };
+
         return [
             [
                 'tag' => 'span[data-type="' . self::$name . '"]',
+                'getAttrs' => $removeContent,
             ],
             [
                 'tag' => 'a[data-type="' . self::$name . '"]',
+                'getAttrs' => $removeContent,
             ],
         ];
     }
@@ -44,7 +56,7 @@ class MentionExtension extends Node
     {
         return [
             'id' => [
-                'parseHTML' => fn ($DOMNode) => $DOMNode->getAttribute('data-id') ?: null,
+                'parseHTML' => static fn ($DOMNode) => (($id = $DOMNode->getAttribute('data-id')) === '') ? null : $id,
                 'renderHTML' => fn ($attributes) => ['data-id' => $attributes->id ?? null],
             ],
             'label' => [

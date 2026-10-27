@@ -1,14 +1,12 @@
 ---
 title: Query builder
 ---
-import Aside from "@components/Aside.astro"
-import AutoScreenshot from "@components/AutoScreenshot.astro"
 
 ## Introduction
 
 The query builder allows you to define a complex set of conditions to filter the data in your table. It is able to handle unlimited nesting of conditions, which you can group together with "and" and "or" operations.
 
-<AutoScreenshot name="tables/filters/query-builder" alt="Query builder filter" version="4.x" />
+<AutoScreenshot name="tables/filters/query-builder" alt="Query builder filter" />
 
 To use it, you need to define a set of "constraints" that will be used to filter the data. Filament includes some built-in constraints, that follow common data types, but you can also define your own custom constraints.
 
@@ -104,6 +102,8 @@ By default, the following operators are available:
 - Does not equal - filters a column to not equal the search term
 - Is filled - filters a column to not be empty
 - Is blank - filters a column to be empty
+
+Text entered into these operators is treated as literal text, so characters such as `%` and `_` do not act as SQL wildcard characters.
 
 ### Boolean constraints
 
@@ -218,9 +218,9 @@ SelectConstraint::make('creator.department') // Filter the `department` column o
 ```
 
 <Aside variant="danger">
-    `options()` is a UI affordance, not an authorization boundary. The list constrains what the dropdown displays, but the submitted value is not checked against it before the constraint runs. Query-builder rules are stored in Livewire state and can be tampered with — a crafted request can submit any value into the constraint's `settings`, and `IsOperator::apply()` passes it straight into `whereIn`/`where` on the query.
+    `options()` controls the available filter values, but it does not restrict access to records. Users can remove the rule, and rules that fail validation are ignored.
 
-    If you are using `options()` to hide certain values from a group of users (for example, hiding `archived` from non-admins), scope the underlying query itself — for example with [`modifyRelationshipQueryUsing()`](#scoping-relationships) on the constraint, a [`modifyQueryUsing()`](../../resources/listing-records#customizing-the-eloquent-query) on the resource, or a global scope on the model — so the restricted rows are never reachable regardless of what the constraint submits.
+    If you are using `options()` to hide certain values from a group of users (for example, hiding `archived` from non-admins), apply the mandatory restriction to the table's underlying query using the resource's [`getEloquentQuery()`](../../resources/overview#customizing-the-resource-eloquent-query), the table's [`modifyQueryUsing()`](../../resources/listing-records#customizing-the-table-eloquent-query), or a global scope on the model. [`modifyRelationshipQueryUsing()`](#scoping-relationships) only scopes the relationship query for that individual rule, which the user can omit. Authorization for operations on records must be handled separately.
 </Aside>
 
 #### Searchable select constraints
@@ -333,6 +333,53 @@ Now, the following operators are also available:
 
 - Is filled - filters a column to not be empty
 - Is blank - filters a column to be empty
+
+## Limiting the size of the rule tree
+
+The set of rules a user builds is stored in the Livewire component's state and submitted with each request. To protect against a request that contains an excessively large or deeply-nested set of rules consuming too much server memory or CPU, you can limit how many rules and how deeply nested they can be.
+
+By default, no limits are applied. You can set them using the `maxRules()` and `maxNestingDepth()` methods:
+
+```php
+use Filament\Tables\Filters\QueryBuilder;
+
+QueryBuilder::make()
+    ->maxRules(100)
+    ->maxNestingDepth(10)
+    ->constraints([
+        // ...
+    ])
+```
+
+Both methods also accept a function to compute the value dynamically:
+
+```php
+use Filament\Tables\Filters\QueryBuilder;
+
+QueryBuilder::make()
+    ->maxRules(fn (): int => auth()->user()->isAdmin() ? 200 : 50)
+    ->constraints([
+        // ...
+    ])
+```
+
+The `maxRules()` limit counts individual conditions only. "OR" groups are structural containers, so they do not count towards the limit themselves — nesting is bounded separately by `maxNestingDepth()`.
+
+When a limit is set, the UI enforces it: once the maximum number of rules is reached, the "add rule" and clone buttons are disabled with a tooltip explaining why, and the "OR" grouping option is hidden once the maximum nesting depth is reached. As a safeguard against a tampered request that bypasses the UI, a submitted rule tree that still exceeds either limit is safely ignored, applying no constraints instead of filtering the table.
+
+<Aside variant="tip">
+    Since these limits are the same for every query builder, you will usually want to apply them globally rather than repeating them on each filter. You can do this using `configureUsing()` in the `boot()` method of a service provider, so that every query builder in your app is bounded:
+
+    ```php
+    use Filament\Tables\Filters\QueryBuilder;
+
+    QueryBuilder::configureUsing(function (QueryBuilder $queryBuilder): void {
+        $queryBuilder
+            ->maxRules(100)
+            ->maxNestingDepth(10);
+    });
+    ```
+</Aside>
 
 ## Scoping relationships
 
@@ -465,6 +512,37 @@ The `label()` method is used to render the options in the operator select. Two o
 The `summary()` method is used in the header of the constraint when it is applied to the query, to provide an overview of the active constraint.
 
 ## Customizing the constraint picker
+
+### Grouping constraints
+
+You may group attributes under headings by using named arrays in `constraints()`:
+
+```php
+use Filament\QueryBuilder\Constraints\DateConstraint;
+use Filament\QueryBuilder\Constraints\TextConstraint;
+use Filament\Tables\Filters\QueryBuilder;
+
+QueryBuilder::make()
+    ->constraints([
+        'Content' => [
+            TextConstraint::make('title'),
+            TextConstraint::make('content'),
+        ],
+        'Publishing' => [
+            DateConstraint::make('published_at'),
+        ],
+    ])
+```
+
+Groups appear in the order they are defined. You may also include ungrouped constraints, which appear first without a heading. These groups are preserved in nested OR conditions and only organize the picker; they do not change how your query is evaluated.
+
+Use group names in `constraints()` that PHP keeps as string array keys. Integer keys (including numeric strings such as `'2026'`, which PHP converts to integers) are treated as ungrouped lists of constraints. Groups retain the order in which they are first defined across repeated calls to `constraints()`.
+
+When you configure multiple columns using `constraintPickerColumns()`, groups flow down each column before moving to the next. Groups stay together, and their heights are balanced across the columns. Otherwise, groups are stacked vertically.
+
+When you group attributes, the OR condition appears in a separate "Logic" group. If you do not group attributes, the OR condition remains ungrouped.
+
+<AutoScreenshot name="tables/filters/query-builder-grouped" alt="Query builder with grouped attributes and logic in the picker" />
 
 ### Changing the number of columns in the constraint picker
 

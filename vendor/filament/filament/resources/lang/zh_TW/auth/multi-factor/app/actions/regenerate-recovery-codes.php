@@ -22,13 +22,15 @@ return [
 
                     'invalid' => '您輸入的驗證碼無效。',
 
+                    'rate_limited' => '嘗試次數過多，請稍後再試。',
+
                 ],
 
             ],
 
             'password' => [
 
-                'label' => '或輸入您目前的密碼',
+                'label' => '輸入您目前的密碼',
 
                 'validation_attribute' => '密碼',
 

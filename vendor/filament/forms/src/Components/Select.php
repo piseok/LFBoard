@@ -8,7 +8,6 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\View\FormsIconAlias;
 use Filament\Schemas\Components\Component;
-use Filament\Schemas\Components\Contracts\HasAffixActions;
 use Filament\Schemas\Components\StateCasts\BooleanStateCast;
 use Filament\Schemas\Components\StateCasts\Contracts\StateCast;
 use Filament\Schemas\Components\StateCasts\EnumArrayStateCast;
@@ -17,10 +16,13 @@ use Filament\Schemas\Components\StateCasts\OptionsArrayStateCast;
 use Filament\Schemas\Components\StateCasts\OptionStateCast;
 use Filament\Schemas\Schema;
 use Filament\Support\Components\Attributes\ExposedLivewireMethod;
+use Filament\Support\Components\Contracts\HasEmbeddedView;
 use Filament\Support\Concerns\HasExtraAlpineAttributes;
+use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentIcon;
 use Filament\Support\Icons\Heroicon;
 use Filament\Support\Services\RelationshipJoiner;
+use Filament\Support\View\ComponentAttributeBag as FilamentComponentAttributeBag;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Connection;
@@ -35,15 +37,18 @@ use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrManyThrough;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Renderless;
 use LogicException;
 use Znck\Eloquent\Relations\BelongsToThrough;
 
+use function Filament\Support\apply_search_constraint;
 use function Filament\Support\generate_search_column_expression;
+use function Filament\Support\generate_search_pattern;
 use function Filament\Support\generate_search_term_expression;
 
-class Select extends Field implements Contracts\CanDisableOptions, Contracts\HasNestedRecursiveValidationRules, HasAffixActions
+class Select extends Field implements Contracts\CanDisableOptions, Contracts\HasAffixes, Contracts\HasNestedRecursiveValidationRules, HasEmbeddedView
 {
     use Concerns\CanAllowHtml;
     use Concerns\CanBeNative;
@@ -63,10 +68,7 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
     use Concerns\HasPlaceholder;
     use HasExtraAlpineAttributes;
 
-    /**
-     * @var view-string
-     */
-    protected string $view = 'filament-forms::components.select';
+    protected ?string $publishedViewOverrideCheckPath = 'filament-forms::components.select';
 
     /**
      * @var array<Component | Action | ActionGroup> | Closure | null
@@ -95,6 +97,10 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
     protected ?Closure $modifyEditOptionActionUsing = null;
 
     protected ?Model $cachedSelectedRecord = null;
+
+    protected mixed $cachedSelectedRecordState = null;
+
+    protected ?string $cachedSelectedRecordStatePath = null;
 
     protected bool | Closure $isMultiple = false;
 
@@ -563,9 +569,17 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
     #[Renderless]
     public function getOptionLabel(bool $withDefault = true): ?string
     {
+        return $this->resolveOptionLabel($withDefault);
+    }
+
+    /**
+     * @param  array<string | array<string>> | null  $options
+     */
+    protected function resolveOptionLabel(bool $withDefault = true, ?array $options = null): ?string
+    {
         if (! $this->getOptionLabelUsing) {
             $state = $this->getState();
-            $options = $this->getOptions();
+            $options ??= $this->getOptions();
 
             if ($state instanceof BackedEnum) {
                 $state = $state->value;
@@ -610,13 +624,14 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
     }
 
     /**
+     * @param  array<string | array<string>> | null  $options
      * @return array<string>
      */
-    public function getOptionLabels(bool $withDefaults = true): array
+    public function getOptionLabels(bool $withDefaults = true, ?array $options = null): array
     {
         if (! $this->getOptionLabelsUsing) {
             $state = $this->getState();
-            $options = $this->getOptions();
+            $options ??= $this->getOptions();
 
             $labels = [];
 
@@ -1437,17 +1452,19 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
         $databaseConnection = $query->getConnection();
 
         $isForcedCaseInsensitive = $this->isSearchForcedCaseInsensitive();
+        $searchPattern = generate_search_pattern($search, hasLeadingWildcard: true, hasTrailingWildcard: true);
 
-        $query->where(function (Builder $query) use ($databaseConnection, $isForcedCaseInsensitive, $search): Builder {
+        $query->where(function (Builder $query) use ($databaseConnection, $isForcedCaseInsensitive, $searchPattern): Builder {
             $isFirst = true;
 
             foreach ($this->getSearchColumns() ?? [] as $searchColumn) {
                 $whereClause = $isFirst ? 'where' : 'orWhere';
 
-                $query->{$whereClause}(
+                apply_search_constraint(
+                    $query,
                     generate_search_column_expression($searchColumn, $isForcedCaseInsensitive, $databaseConnection),
-                    'like',
-                    "%{$search}%",
+                    $searchPattern,
+                    ($whereClause === 'where') ? 'and' : 'or',
                 );
 
                 $isFirst = false;
@@ -1548,15 +1565,26 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
 
     public function getSelectedRecord(): ?Model
     {
-        if ($this->cachedSelectedRecord) {
+        $state = $this->getState();
+        $statePath = $this->getStatePath();
+
+        if (
+            $this->cachedSelectedRecord &&
+            ($this->cachedSelectedRecordState === $state) &&
+            ($this->cachedSelectedRecordStatePath === $statePath)
+        ) {
             return $this->cachedSelectedRecord;
         }
 
-        if (blank($this->getState())) {
-            return null;
+        if (blank($state)) {
+            return $this->cachedSelectedRecord = null;
         }
 
-        return $this->cachedSelectedRecord = $this->evaluate($this->getSelectedRecordUsing);
+        $this->cachedSelectedRecord = $this->evaluate($this->getSelectedRecordUsing);
+        $this->cachedSelectedRecordState = $state;
+        $this->cachedSelectedRecordStatePath = $statePath;
+
+        return $this->cachedSelectedRecord;
     }
 
     public function hasRelationship(): bool
@@ -1810,5 +1838,236 @@ class Select extends Field implements Contracts\CanDisableOptions, Contracts\Has
     public function hasNullableBooleanState(): bool
     {
         return true;
+    }
+
+    public function getRequiredDescription(): ?string
+    {
+        if ((! $this->isRequired()) || $this->isDisabled() || ($this->isNative() && (! $this->isSearchable()) && (! $this->isMultiple()) && (! $this->isHtmlAllowed()))) {
+            return null;
+        }
+
+        return __('filament-forms::components.select.required_description');
+    }
+
+    public function toEmbeddedHtml(): string
+    {
+        $extraInputAttributeBag = $this->getExtraInputAttributeBag();
+        $canSelectPlaceholder = $this->canSelectPlaceholder();
+        $isAutofocused = $this->isAutofocused();
+        $isDisabled = $this->isDisabled();
+        $isMultiple = $this->isMultiple();
+        $isReorderable = $this->isReorderable();
+        $isSearchable = $this->isSearchable();
+        $hasInitialNoOptionsMessage = $this->hasInitialNoOptionsMessage();
+        $canOptionLabelsWrap = $this->canOptionLabelsWrap();
+        $isRequired = $this->isRequired();
+        $isHtmlAllowed = $this->isHtmlAllowed();
+        $isNative = (! ($isSearchable || $isMultiple || $isHtmlAllowed) && $this->isNative());
+        $isPrefixInline = $this->isPrefixInline();
+        $isSuffixInline = $this->isSuffixInline();
+        $key = $this->getKey();
+        $id = $this->getId();
+        $prefixActions = $this->getPrefixActions();
+        $prefixIcon = $this->getPrefixIcon();
+        $prefixIconColor = $this->getPrefixIconColor();
+        $prefixLabel = $this->getPrefixLabel();
+        $suffixActions = $this->getSuffixActions();
+        $suffixIcon = $this->getSuffixIcon();
+        $suffixIconColor = $this->getSuffixIconColor();
+        $suffixLabel = $this->getSuffixLabel();
+        $statePath = $this->getStatePath();
+        $state = $this->getRawState();
+        $livewireKey = $this->getLivewireKey();
+        $hasDynamicOptions = $this->hasDynamicOptions();
+
+        // Filter visible prefix/suffix actions
+        $prefixActions = array_filter(
+            $prefixActions,
+            static fn (Action $action): bool => $action->isVisible(),
+        );
+        $suffixActions = array_filter(
+            $suffixActions,
+            static fn (Action $action): bool => $action->isVisible(),
+        );
+
+        $hasPrefix = count($prefixActions) || $prefixIcon || filled($prefixLabel);
+
+        $wrapperAttributes = $this->getExtraAttributeBag()
+            ->merge([
+                'x-on:focus-input.stop' => $isNative
+                    ? "\$el.querySelector('select')?.focus()"
+                    : "\$el.querySelector('.fi-select-input-btn')?.focus()",
+            ], escape: false)
+            ->class([
+                'fi-fo-select',
+                'fi-fo-select-has-inline-prefix' => $isPrefixInline && $hasPrefix,
+                'fi-fo-select-native' => $isNative,
+            ]);
+
+        ob_start(); ?>
+
+
+                <?php if ($isNative) { ?>
+                    <?php $options = $this->getOptions(); ?>
+
+                    <select
+                        <?= $extraInputAttributeBag
+                            ->merge([
+                                ...$this->getAccessibilityAttributes(),
+                                'autofocus' => $isAutofocused,
+                                'disabled' => $isDisabled,
+                                'id' => $id,
+                                'required' => $isRequired && (! $isDisabled),
+                                'wire:key' => $hasDynamicOptions ? ($livewireKey . '.' . substr(md5(serialize($options)), 0, 64)) : null,
+                                $this->applyStateBindingModifiers('wire:model') => $statePath,
+                            ], escape: false)
+                            ->class([
+                                'fi-select-input',
+                                'fi-select-input-has-inline-prefix' => $isPrefixInline && $hasPrefix,
+                            ])
+                            ->toHtml() ?>
+                    >
+                        <?php if ($canSelectPlaceholder) { ?>
+                            <option value="">
+                                <?= e($this->getPlaceholder()) ?>
+                            </option>
+                        <?php } ?>
+
+                        <?php foreach ($options as $value => $label) { ?>
+                            <?php if (is_array($label)) { ?>
+                                <optgroup label="<?= e($value) ?>">
+                                    <?php foreach ($label as $groupedValue => $groupedLabel) { ?>
+                                        <option
+                                            <?php if ($this->isOptionDisabled($groupedValue, $groupedLabel)) { ?> disabled <?php } ?>
+                                            value="<?= e($groupedValue) ?>"
+                                        >
+                                            <?= e($groupedLabel) ?>
+                                        </option>
+                                    <?php } ?>
+                                </optgroup>
+                            <?php } else { ?>
+                                <option
+                                    <?php if ($this->isOptionDisabled($value, $label)) { ?> disabled <?php } ?>
+                                    value="<?= e($value) ?>"
+                                >
+                                    <?= e($label) ?>
+                                </option>
+                            <?php } ?>
+                        <?php } ?>
+                    </select>
+                <?php } else { ?>
+                    <?php $options = $this->getOptions(); ?>
+                    <?php
+                    $accessibilityAttributes = [
+                        ...$this->getAccessibilityAttributes(),
+                        'aria-required' => ($isRequired && (! $isDisabled)) ? 'true' : null,
+                        ...$extraInputAttributeBag->only(['aria-label', 'aria-labelledby', 'aria-describedby', 'aria-invalid', 'aria-busy', 'aria-required'])->getAttributes(),
+                    ];
+                    $accessibilityAttributes['aria-describedby'] = implode(' ', array_unique([
+                        ...$this->getDescriptionIds(),
+                        ...preg_split('/\s+/', trim($extraInputAttributeBag->get('aria-describedby') ?? ''), flags: PREG_SPLIT_NO_EMPTY),
+                    ])) ?: null;
+                    ?>
+
+                    <div
+                        class="fi-hidden"
+                        data-select-accessibility="<?= e(Js::encode($accessibilityAttributes)) ?>"
+                        x-data="{
+                            isDisabled: <?= Js::from($isDisabled) ?>,
+                            init() {
+                                const container = $el.nextElementSibling
+                                container.dispatchEvent(
+                                    new CustomEvent('set-select-property', {
+                                        detail: { isDisabled: this.isDisabled },
+                                    }),
+                                )
+                            },
+                        }"
+                    ></div>
+                    <div
+                        x-load
+                        x-load-src="<?= e(FilamentAsset::getAlpineComponentSrc('select', 'filament/forms')) ?>"
+                        x-data="selectFormComponent({
+                                    canOptionLabelsWrap: <?= Js::from($canOptionLabelsWrap) ?>,
+                                    canSelectPlaceholder: <?= Js::from($canSelectPlaceholder) ?>,
+                                    clearButtonLabel: <?= Js::from(__('filament-forms::components.select.actions.clear.label')) ?>,
+                                    errorMessage: <?= Js::from(__('filament-forms::components.select.error_message')) ?>,
+                                    getOptionLabelUsing: async () => {
+                                        return await $wire.callSchemaComponentMethod(<?= Js::from($key) ?>, 'getOptionLabel')
+                                    },
+                                    getOptionLabelsUsing: async () => {
+                                        return await $wire.callSchemaComponentMethod(
+                                            <?= Js::from($key) ?>,
+                                            'getOptionLabelsForJs',
+                                        )
+                                    },
+                                    getOptionsUsing: async (request) => {
+                                        return await request(
+                                            $wire,
+                                            'callSchemaComponentMethod',
+                                            [<?= Js::from($key) ?>, 'getOptionsForJs'],
+                                        )
+                                    },
+                                    getSearchResultsUsing: async (search, request) => {
+                                        return await request(
+                                            $wire,
+                                            'callSchemaComponentMethod',
+                                            [<?= Js::from($key) ?>, 'getSearchResultsForJs'],
+                                            { search },
+                                        )
+                                    },
+                                    hasDynamicOptions: <?= Js::from($hasDynamicOptions) ?>,
+                                    hasDynamicSearchResults: <?= Js::from($this->hasDynamicSearchResults()) ?>,
+                                    hasInitialNoOptionsMessage: <?= Js::from($hasInitialNoOptionsMessage) ?>,
+                                    id: <?= Js::from($id) ?>,
+                                    initialOptionLabel: <?= Js::from((blank($state) || $isMultiple) ? null : $this->resolveOptionLabel(options: $options)) ?>,
+                                    initialOptionLabels: <?= Js::from((filled($state) && $isMultiple) ? $this->transformOptionsForJs($this->getOptionLabels(options: $options)) : []) ?>,
+                                    initialState: <?= Js::from($state) ?>,
+                                    isAutofocused: <?= Js::from($isAutofocused) ?>,
+                                    isDisabled: <?= Js::from($isDisabled) ?>,
+                                    isHtmlAllowed: <?= Js::from($isHtmlAllowed) ?>,
+                                    isMultiple: <?= Js::from($isMultiple) ?>,
+                                    isReorderable: <?= Js::from($isReorderable) ?>,
+                                    isSearchable: <?= Js::from($isSearchable) ?>,
+                                    livewireId: <?= Js::from($this->getLivewire()->getId()) ?>,
+                                    loadingMessage: <?= Js::from($this->getLoadingMessage()) ?>,
+                                    maxItems: <?= Js::from($this->getMaxItems()) ?>,
+                                    maxItemsMessage: <?= Js::from($this->getMaxItemsMessage()) ?>,
+                                    noOptionsMessage: <?= Js::from($this->getNoOptionsMessage()) ?>,
+                                    noSearchResultsMessage: <?= Js::from($this->getNoSearchResultsMessage()) ?>,
+                                    options: <?= Js::from($this->transformOptionsForJs($options)) ?>,
+                                    optionsLimit: <?= Js::from($this->getOptionsLimit()) ?>,
+                                    placeholder: <?= Js::from($this->getPlaceholder()) ?>,
+                                    position: <?= Js::from($this->getPosition()) ?>,
+                                    removeButtonLabel: <?= Js::from(__('filament-forms::components.select.actions.remove_option.label')) ?>,
+                                    searchDebounce: <?= Js::from($this->getSearchDebounce()) ?>,
+                                    searchingMessage: <?= Js::from($this->getSearchingMessage()) ?>,
+                                    searchLabel: <?= Js::from(__('filament-forms::components.select.search_label')) ?>,
+                                    searchPrompt: <?= Js::from($this->getSearchPrompt()) ?>,
+                                    searchableOptionFields: <?= Js::from($this->getSearchableOptionFields()) ?>,
+                                    state: $wire.<?= $this->applyStateBindingModifiers("\$entangle('{$statePath}')") ?>,
+                                    statePath: <?= Js::from($statePath) ?>,
+                                })"
+                        wire:ignore
+                        wire:key="<?= e($livewireKey) ?>.<?= substr(md5(serialize([$isDisabled, $isReorderable])), 0, 64) ?>"
+                        x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()"
+                        <?= (new FilamentComponentAttributeBag)
+                            ->merge($this->getExtraAlpineAttributes(), escape: false)
+                            ->class(['fi-select-input'])
+                            ->toHtml() ?>
+                    >
+                        <div x-ref="select"></div>
+                    </div>
+                <?php } ?>
+
+        <?php $slotHtml = ob_get_clean();
+
+        return $this->wrapEmbeddedHtml(
+            $this->wrapInputHtml(
+                $slotHtml,
+                attributes: $wrapperAttributes,
+            ),
+            extraWrapperAttributes: ['class' => 'fi-fo-select-wrp'],
+        );
     }
 }

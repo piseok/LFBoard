@@ -4,6 +4,8 @@ namespace Filament\Schemas\Components\StateCasts;
 
 use BackedEnum;
 use Filament\Schemas\Components\StateCasts\Contracts\StateCast;
+use Stringable;
+use TypeError;
 
 class EnumStateCast implements StateCast
 {
@@ -24,13 +26,27 @@ class EnumStateCast implements StateCast
             return $state;
         }
 
-        return $this->enum::tryFrom($state);
+        if ($state instanceof Stringable) {
+            $state = (string) $state;
+        }
+
+        if ((! is_int($state)) && (! is_string($state))) {
+            return null;
+        }
+
+        try {
+            return $this->enum::tryFrom($state);
+        } catch (TypeError) {
+            return null;
+        }
     }
 
     public function set(mixed $state): mixed
     {
-        if (! ($state instanceof BackedEnum)) {
-            return $state;
+        $state = $this->get($state);
+
+        if ($state === null) {
+            return null;
         }
 
         return strval($state->value);
